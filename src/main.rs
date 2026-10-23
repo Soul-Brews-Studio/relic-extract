@@ -5,6 +5,7 @@
 //!   relic-extract run         relic-scan months -> OUT/<stream>/YYYY-MM.parquet (only what changed)
 //!   relic-extract status      per stream: months cut, chunks, distinct texts, newest ts
 
+mod clean;
 mod config;
 mod extract;
 mod json;
@@ -40,6 +41,9 @@ enum Cmd {
         /// cut them even if they look fresh
         #[arg(long)]
         force: bool,
+        /// the Python reference's cut: every role, no clean step, main-tier sessions (for `just parity`)
+        #[arg(long)]
+        raw: bool,
     },
     /// Per stream: months, chunks, distinct texts, newest message
     Status,
@@ -60,20 +64,25 @@ fn main() {
         }
         return;
     }
-    let cfg = config::load(given).unwrap_or_else(|e| fail(e));
+    let mut cfg = config::load(given).unwrap_or_else(|e| fail(e));
     match cli.cmd {
         Cmd::Init => unreachable!(),
         Cmd::Config => {
             println!("# {}{}", cfg.path.display(), if cfg.existed { "" } else { "  (missing: defaults; relic-extract init writes it)" });
             println!("{}", run::pretty(&cfg.v));
         }
-        Cmd::Run { months, stream, force } => {
+        Cmd::Run { months, stream, force, raw } => {
+            if raw {
+                cfg.raw();
+            }
             let t0 = std::time::Instant::now();
             eprintln!("relic-extract: {} -> {} · config {}{}", cfg.source(), cfg.out(), cfg.path.display(),
                       if cfg.existed { "" } else { " (defaults)" });
             let months = months.map(|m| m.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect());
             let done = run::run(&cfg, months, force, stream.as_deref()).unwrap_or_else(|e| fail(e));
-            eprintln!("{} part(s) cut in {:.1}s", done.len(), t0.elapsed().as_secs_f64());
+            let (chunks, dropped): (usize, usize) = done.iter().fold((0, 0), |a, d| (a.0 + d.chunks, a.1 + d.dropped));
+            eprintln!("{} part(s) cut in {:.1}s · {} chunks · {} messages cleaned out", done.len(), t0.elapsed().as_secs_f64(),
+                      extract::num(chunks), extract::num(dropped));
         }
         Cmd::Status => run::status(&cfg),
     }

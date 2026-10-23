@@ -9,7 +9,7 @@ DIR=${PARITY_DIR:-$HOME/.relic-extract-parity}
 mkdir -p -m 700 "$DIR"
 sed -e "s|^out = .*|out = \"$DIR/out\"|" "${ARRA_CONFIG:-$HOME/.arra/relic.toml}" > "$DIR/relic.toml"
 BIN=${BIN:-target/release/relic-extract}
-/usr/bin/time -l "$BIN" --config "$DIR/relic.toml" run --stream "$STREAM" --force 2>&1 | rg "cut in|real|peak memory"
+/usr/bin/time -l "$BIN" --config "$DIR/relic.toml" run --stream "$STREAM" --force --raw 2>&1 | rg "cut in|real|peak memory"
 COLS="key, msgkey, chunk, h, n_h, month, sid, ts, ts_th, engine, role, type, kind, name, cat, probe, text"
 duckdb -c "
 create view py as select $COLS from read_parquet('$PY/$STREAM/*.parquet');
