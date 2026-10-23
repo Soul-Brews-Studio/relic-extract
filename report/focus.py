@@ -126,9 +126,9 @@ def main():
         for c in range(k):
             tot = sum(tf[c].values()) or 1
             sc = {tok: (f / tot) * math.log(1 + A / freq[tok]) for tok, f in tf[c].items() if f >= 2}
-            top = sorted(sc.items(), key=lambda kv: -kv[1])[:40]
+            top = sorted(sc.items(), key=lambda kv: (-round(kv[1], 12), kv[0]))[:40]
             df = lambda tok: sum(1 for t in tf if tok in t)
-            terms = [t for t, _ in sorted(((t, v * math.log(1 + k / df(t))) for t, v in top), key=lambda kv: -kv[1])[:8]]
+            terms = [t for t, _ in sorted(((t, v * math.log(1 + k / df(t))) for t, v in top), key=lambda kv: (-round(kv[1], 12), kv[0]))[:8]]
             idx = np.where(lab == c)[0]
             near = sorted(idx[np.argsort(-sim[idx])][:30], key=lambda i: (len(texts[i]) > 220, -sim[i]))[:4]
             fp_ = " · ".join(sorted(terms[:3]))

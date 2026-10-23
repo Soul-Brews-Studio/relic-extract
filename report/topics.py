@@ -111,9 +111,9 @@ def main():
         tot = sum(tf[c].values()) or 1
         df = lambda tok: sum(1 for t in tf if tok in t)
         sc = {tok: (f / tot) * math.log(1 + A / freq[tok]) for tok, f in tf[c].items() if f >= 3}
-        top = sorted(sc.items(), key=lambda kv: -kv[1])[:60]  # then favour words few topics share
+        top = sorted(sc.items(), key=lambda kv: (-round(kv[1], 12), kv[0]))[:60]  # then favour words few topics share
         sc = {tok: v * math.log(1 + a.k / df(tok)) for tok, v in top}
-        terms.append([t for t, _ in sorted(sc.items(), key=lambda kv: -kv[1])[:8]])
+        terms.append([t for t, _ in sorted(sc.items(), key=lambda kv: (-round(kv[1], 12), kv[0]))[:8]])
 
     # per month: messages per topic
     ix = {k: i for i, k in enumerate(keys)}
