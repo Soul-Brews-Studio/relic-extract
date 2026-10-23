@@ -40,3 +40,19 @@ parity STREAM="text": build
 # raw and cleaned cut vs their references, on a frozen source (scripts/verify.sh)
 verify: build
     scripts/verify.sh
+
+# embed the text parts with relic4 (agent-relic-v4) on gb300; RELIC4_ROOT picks the vector root
+embed:
+    cd ../agent-relic-v4 && RELIC4_RECIPE=text-v2 RELIC4_EMBED_WHERE=remote uv run relic4 embed text-v2
+
+# topics from the prompt vectors -> ~/.relic-extract/report/topics.json
+topics *ARGS:
+    uv run --with scikit-learn --with pythainlp python report/topics.py {{ARGS}}
+
+# the month-by-month page -> ~/.relic-extract/report/index.html
+report:
+    uv run python report/build.py
+
+# counts only, no names or example text -> ~/.relic-extract/report-public/index.html
+report-public:
+    uv run python report/build.py --public

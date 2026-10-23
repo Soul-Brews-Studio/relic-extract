@@ -118,6 +118,24 @@ max_chars = 2000                # a tool body is cut here, not chunked
 
 The cut and the keys are the same as agent-relic-v4's `split` (recipe `text-v1`) and jsonl-truth's `embed/export.py`. A chunk's `key` therefore finds a vector either of them already made.
 
+## Report: month by month
+
+`report/` turns the chain's output into one self-contained page: scan → extract → embed → topics → report.
+
+```
+just embed          # relic4 embeds the text parts (gb300); vectors land in its cache, keyed by chunk key
+just topics         # k-means on the prompt vectors -> ~/.relic-extract/report/topics.json
+just report         # DuckDB aggregates + topics -> ~/.relic-extract/report/index.html (+ report.json, monthly.parquet)
+just report-public  # the same with counts only: no repository, skill or example text -> report-public/
+```
+
+Perspectives, one section each: what the index holds, who writes the prompts (main sessions, agent to agent,
+harness text), agents spawning agents, engines, tools and their error rate, thinking saved vs signature only,
+the hour and weekday prompts come in, Thai vs English, how long a conversation lasts, skills, repositories,
+new repositories, and the topics: prompts per topic per month, each month's main topics, a map of the topics.
+The page makes no network calls; numbers come only from the data. `monthly.parquet` holds every number as
+(month, metric, series, value) for DuckDB.
+
 ## Docs
 
 - `docs/SCAN-INPUT.md`: relic-scan's output, read from its source and checked against the data (10 rounds).
