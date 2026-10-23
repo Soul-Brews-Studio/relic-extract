@@ -108,6 +108,8 @@
       }, t("works.note"));
     }
 
+    if (typeof workSection === "function") workSection();
+
     // growth
     if (V.growth) {
       const g = V.growth;

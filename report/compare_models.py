@@ -44,7 +44,7 @@ def main():
     for d in picks:
         shape, lines, alines = dy.day_input(con, d)
         nums = json.dumps({k: v for k, v in shape.items()})
-        inputs[d] = (shape, dy.PROMPT.format(day=d, nums=nums, lines=lines, agents=alines))
+        inputs[d] = (shape, dy.PROMPT.format(span="one day", day=d, nums=nums, lines=lines, agents=alines))
     tun = dy.tunnel(a.host, a.models.split(",")[0])
     res = {}
     try:

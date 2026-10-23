@@ -28,19 +28,34 @@ import common
 
 HOME = Path.home()
 OUT = HOME / ".relic-extract" / "report"
-PROMPT = """You read one day ({day}) of a person's work with AI coding agents: the prompts they typed (English and Thai),
-prompts their agents wrote for other agents, and measured numbers. Describe the day for that person's own diary.
-Be concrete: name the projects, tools and problems you see. Never invent; if the prompts do not show it, say less.
-Repeated loop prompts were removed from the list (their count is in the numbers).
+PROMPT = """You read {span} ({day}) of ONE person's work with AI coding agents: the prompts that person typed (English and
+Thai), prompts their agents wrote for other agents, and measured numbers. Describe the day for that person's own diary.
+Be concrete: name the projects, tools, files and problems you see. Never invent; if the prompts do not show it, say less.
+
+Read these right:
+- "The user sent a new message while you were working" is the SAME person adding an instruction to a running agent.
+  It is steering, never an interruption by someone else. Do not call it "user messages" or "interruptions".
+- Pasted output (PANE …, rc=…, command output) is the person showing an agent a result.
+- Repeated loop prompts were removed from the list; their count is in the numbers (loop_prompts).
+
+"type": the kind of work most of the day's prompts belong to:
+  build = making a new feature, app, page or tool · fix = debugging, errors, failing tests · research = reading,
+  comparing, literature, exploring a codebase · ops = fleet, servers, monitoring, deploy, machines · writing = books,
+  docs, posts, chapters · planning = deciding, designing, issues and roadmaps. Use "mixed" ONLY if no kind holds 40%.
+"distraction": what pulled attention from the focus: other projects, loops left running, tool errors, monitoring,
+  machine trouble. Say "none" if the day stayed on its focus.
+"th": two sentences in Thai the way a Thai engineer writes for himself: the topic first, plain verbs, English tech words
+  left in English (deploy, test, repo, PR, UI). Never use อย่างไรก็ตาม, ซึ่ง, ในขณะที่, การที่, โดยรวม, นอกจากนี้.
+
 Answer with JSON only, these keys:
-{{"type": one of "build", "fix", "research", "ops", "writing", "planning", "mixed",
+{{"type": "build|fix|research|ops|writing|planning|mixed",
   "focus": "the one thing the day was mostly about (one sentence)",
-  "distraction": "what pulled attention away from the focus, or \"none\" (one sentence)",
+  "distraction": "(one sentence, or \"none\")",
   "work": ["up to 4 short items: what was built, fixed or decided"],
   "agents": "what the agents were set to do, from their prompts (one sentence)",
-  "pattern": "how the person worked today: e.g. many short checks, one long build, loops left running (one sentence)",
+  "pattern": "how the person worked today, e.g. many short checks, one long build, loops left running (one sentence)",
   "en": "two-sentence summary in English",
-  "th": "สรุปสองประโยคเป็นภาษาไทย เขียนแบบคนไทยเขียนเอง"}}
+  "th": "สรุปสองประโยค"}}
 
 Numbers: {nums}
 Prompts the person typed (time, project, text):
@@ -69,6 +84,16 @@ def tunnel(host, model, port=11447):
 
 
 KEYS = ("type", "focus", "distraction", "work", "agents", "pattern", "en", "th")
+LOG = Path.home() / ".relic-extract" / "report" / "readings.jsonl"
+
+
+def keep(unit, model, prompt, answer, secs):
+    """Append every answer to readings.jsonl, never rewritten: a newer prompt replaces a reading in the cache, the
+    log keeps all of them (unit = day or day+block, prompt = its md5, so versions can be compared later)."""
+    with open(LOG, "a") as f:
+        f.write(json.dumps(dict(at=time.strftime("%Y-%m-%dT%H:%M:%S%z"), unit=unit, model=model,
+                                prompt=hashlib.md5(prompt.encode()).hexdigest()[:12], secs=secs, answer=answer), ensure_ascii=False) + "\n")
+    LOG.chmod(0o600)
 
 
 def ask(model, prompt, port=11447):
@@ -92,12 +117,12 @@ def ask(model, prompt, port=11447):
         return {"en": out.strip()[:600], "th": "", "json_ok": False}
 
 
-def day_input(con, d):
-    """The day's prompts for the model, loops out, plus its measured shape."""
-    day = "substr(x.ts_th, 1, 10)"
+def day_input(con, d, h0=0, h1=24):
+    """The prompts of day d between hours h0 and h1 (Bangkok) for the model, loops out, plus their measured shape."""
+    day = f"substr(x.ts_th, 1, 10) = ? and cast(substr(x.ts_th, 12, 2) as int) >= {int(h0)} and cast(substr(x.ts_th, 12, 2) as int) < {int(h1)} and true"
     rows = con.execute(f"""select substr(x.ts_th, 12, 5) AS hm, coalesce(ses.cat, x.cat) AS cat, x.text, x.key
                            from x left join ses using (sid) where x.role = 'user' and x.chunk = 0 and x.tier = 'main'
-                           and {day} = ? order by x.ts_th""", [d]).fetchall()
+                           and {day} order by x.ts_th""", [d]).fetchall()
     rows = [r for r in rows if len(r[2].strip()) >= 8]
     reps = Counter(r[3] for r in rows)
     loops = sum(n for n in reps.values() if n >= 3)
@@ -109,7 +134,7 @@ def day_input(con, d):
     cats = Counter(r[1] for r in rows)
     switches = sum(1 for a, b in zip(rows, rows[1:]) if a[1] != b[1])
     agents = con.execute(f"""select coalesce(ses.cat, x.cat), any_value(x.text) from x left join ses using (sid)
-                             where x.role = 'user' and x.chunk = 0 and x.tier <> 'main' and {day} = ? group by 1, x.key
+                             where x.role = 'user' and x.chunk = 0 and x.tier <> 'main' and {day} group by 1, x.key
                              order by random() limit 12""", [d]).fetchall()
     shape = dict(prompts=len(rows), distinct=len(uniq), loop_prompts=loops, projects=len(cats),
                  top_project=cats.most_common(1)[0][0] if cats else None,
@@ -177,13 +202,14 @@ def main():
                 D[d]["shape"] = shape
                 nums = json.dumps({**{k: D[d].get(k) for k in ("prompts_agent", "tool_calls", "tool_errors")},
                                    **{k: v for k, v in shape.items() if k != "projects_top"}, "projects_top": shape["projects_top"]})
-                prompt = PROMPT.format(day=d, nums=nums, lines=lines, agents=alines)
+                prompt = PROMPT.format(span="one day", day=d, nums=nums, lines=lines, agents=alines)
                 h = hashlib.md5((a.model + prompt).encode()).hexdigest()
                 ck = f"{a.model}|{d}"
                 if cache.get(ck, {}).get("h") != h:
                     t1 = time.time()
                     cache[ck] = dict(h=h, model=a.model, secs=0, **ask(a.model, prompt))
                     cache[ck]["secs"] = round(time.time() - t1, 1)
+                    keep(d, a.model, prompt, {k: cache[ck].get(k) for k in KEYS + ("json_ok",)}, cache[ck]["secs"])
                     n_ask += 1
                     print(f"  {d} · {shape['prompts']} prompts ({shape['distinct']} distinct, {shape['loop_prompts']} loop) · "
                           f"{shape['projects']} projects · {cache[ck]['secs']}s · {str(cache[ck].get('focus') or cache[ck].get('en'))[:90]}", flush=True)
