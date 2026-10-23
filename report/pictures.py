@@ -63,7 +63,7 @@ def main():
     import umap
     Z = PCA(n_components=50, random_state=0).fit_transform(X)
     Y = umap.UMAP(n_neighbors=30, min_dist=0.1, metric="cosine", random_state=0).fit_transform(Z)
-    lo, hi = np.percentile(Y, 0.5, axis=0), np.percentile(Y, 99.5, axis=0)  # islands of near-identical prompts sit far out
+    lo, hi = np.percentile(Y, 1, axis=0), np.percentile(Y, 99, axis=0)  # islands of near-identical prompts sit far out
     inside = ((Y >= lo) & (Y <= hi)).all(1)
     Yn = np.clip((Y - lo) / (hi - lo), 0, 1)
     pts = [[int(a * 1000), int(b * 1000), int(t)] for (a, b), t, ok in zip(Yn, lab, inside) if ok]

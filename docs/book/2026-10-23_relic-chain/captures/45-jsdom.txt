@@ -1,0 +1,10 @@
+$ node check.js   (every view, both languages)
+report en cards 55 months 14 rail 0 findings 37 svg 46 462ms 
+report th cards 55 months 14 rail 0 findings 37 svg 46 461ms 
+report-share en cards 49 months 14 rail 0 findings 31 svg 43 278ms 
+report-share th cards 49 months 14 rail 0 findings 31 svg 43 289ms 
+report-public en cards 37 months 14 rail 0 findings 19 svg 28 168ms 
+report-public th cards 37 months 14 rail 0 findings 19 svg 28 166ms 
+errors 4 [
+]
+(exit 0 · 2.2 s)

@@ -28,34 +28,38 @@ def main():
     ap.add_argument("--host", default="gb300")
     ap.add_argument("--min", type=int, default=5)
     ap.add_argument("--limit", type=int, default=0, help="only the first N blocks (a trial)")
+    ap.add_argument("--hours", type=int, default=3, choices=[1, 2, 3, 4, 6], help="block length")
     a = ap.parse_args()
     t0 = time.time()
     con = common.connect(HOME / ".relic-scan", HOME / ".relic-extract")
-    units = con.execute("""select substr(ts_th, 1, 10) d, (cast(substr(ts_th, 12, 2) as int) / 3) * 3 h0, count(distinct msgkey) n
+    units = con.execute("""select substr(ts_th, 1, 10) d, (cast(substr(ts_th, 12, 2) as int) // {H}) * {H} AS h0, count(distinct msgkey) n
                            from x where role = 'user' and chunk = 0 and tier = 'main' and ts_th <> '' group by 1, 2
-                           having count(distinct msgkey) >= ? order by 1, 2""", [a.min]).fetchall()
+                           having count(distinct msgkey) >= ? order by 1, 2""".replace("{H}", str(a.hours)), [a.min]).fetchall()
     if a.limit:
         units = units[: a.limit]
-    print(f"blocks: {len(units)} active 3-hour blocks (>= {a.min} prompts) · {time.time() - t0:.0f}s", flush=True)
-    cache_f = OUT / "blocks-cache.json"
+    print(f"blocks: {len(units)} active {a.hours}-hour blocks (>= {a.min} prompts) · {time.time() - t0:.0f}s", flush=True)
+    tag = "" if a.hours == 3 else f"-{a.hours}h"   # the 3-hour run keeps its original file names and cache keys
+    cache_f = OUT / f"blocks-cache{tag}.json"
     cache = json.loads(cache_f.read_text()) if cache_f.exists() else {}
     tun = dy.tunnel(a.host, a.model)
     out = []
     try:
         for i, (d, h0, n) in enumerate(units):
-            shape, lines, alines = dy.day_input(con, d, h0, h0 + 3)
+            h0 = int(h0)
+            shape, lines, alines = dy.day_input(con, d, h0, h0 + a.hours)
             if not shape["prompts"]:
                 continue
             nums = json.dumps({k: v for k, v in shape.items()})
-            prompt = dy.PROMPT.format(span="one 3-hour block", day=f"{d} {h0:02d}:00-{h0 + 3:02d}:00", nums=nums, lines=lines, agents=alines)
+            span = "one hour" if a.hours == 1 else f"one {a.hours}-hour block"
+            prompt = dy.PROMPT.format(span=span, day=f"{d} {h0:02d}:00-{h0 + a.hours:02d}:00", nums=nums, lines=lines, agents=alines)
             h = hashlib.md5((a.model + prompt).encode()).hexdigest()
-            ck = f"{a.model}|{d}|{h0:02d}"
+            ck = f"{a.model}|{d}|{h0:02d}" + tag
             if cache.get(ck, {}).get("h") != h:
                 t1 = time.time()
                 cache[ck] = dict(h=h, model=a.model, **dy.ask(a.model, prompt))
                 cache[ck]["secs"] = round(time.time() - t1, 1)
-                dy.keep(f"{d} {h0:02d}", a.model, prompt, {k: cache[ck].get(k) for k in dy.KEYS + ("json_ok",)}, cache[ck]["secs"])
-                print(f"  {d} {h0:02d}-{h0 + 3:02d} · {shape['prompts']} prompts · {shape['projects']} projects · {cache[ck]['secs']}s · "
+                dy.keep(f"{d} {h0:02d}{tag}", a.model, prompt, {k: cache[ck].get(k) for k in dy.KEYS + ("json_ok",)}, cache[ck]["secs"])
+                print(f"  {d} {h0:02d}-{h0 + a.hours:02d} · {shape['prompts']} prompts · {shape['projects']} projects · {cache[ck]['secs']}s · "
                       f"{cache[ck].get('type')} · {str(cache[ck].get('focus'))[:80]}", flush=True)
                 if i % 20 == 0:
                     cache_f.write_text(json.dumps(cache, ensure_ascii=False, indent=1))
@@ -89,10 +93,11 @@ def main():
         day_top_leads=round(sum(c["led"] / c["blocks"] for c in multi) / max(1, len(multi)), 3),
         mean_focus_projects=round(sum(c["focus_projects"] for c in multi) / max(1, len(multi)), 2),
         by_hour=sorted(Counter(b["h0"] for b in out).items()))
-    (OUT / "blocks.json").write_text(json.dumps(dict(built=time.strftime("%Y-%m-%d %H:%M"), model=a.model, summary=summary,
+    dst = OUT / f"blocks{tag}.json"
+    dst.write_text(json.dumps(dict(built=time.strftime("%Y-%m-%d %H:%M"), model=a.model, hours=a.hours, summary=summary,
                                                     blocks=out, compare=cmp), ensure_ascii=False, indent=1))
-    (OUT / "blocks.json").chmod(0o600)
-    print(f"blocks: {len(out)} blocks over {len(cmp)} days · {time.time() - t0:.0f}s -> {OUT / 'blocks.json'}")
+    dst.chmod(0o600)
+    print(f"blocks: {len(out)} {a.hours}-hour blocks over {len(cmp)} days · {time.time() - t0:.0f}s -> {dst}")
     print(f"  block types {summary['types'][:6]}")
     print(f"  on days with 3+ blocks: the day's top project leads {summary['day_top_leads']:.0%} of its blocks; "
           f"{summary['mean_focus_projects']} different lead projects a day")

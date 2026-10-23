@@ -1,0 +1,4 @@
+$ just report && just report-public
+report: 14 months · 5,451,068 rows · 1,386 monthly values · 4.0s -> /Users/beta/.relic-extract/report/index.html
+report: 14 months · 5,451,068 rows · 994 monthly values · 3.5s -> /Users/beta/.relic-extract/report-public/index.html
+(exit 0 · 13.7 s)

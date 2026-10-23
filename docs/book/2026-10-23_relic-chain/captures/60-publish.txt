@@ -1,0 +1,12 @@
+$ just publish
+report: 14 months · 5,451,068 rows · 1,386 monthly values · 4.2s -> /Users/beta/.relic-extract/report-share/index.html
+[90m9:42PM[0m [32mINF[0m [1mscanned ~2794330 bytes (2.79 MB) in 295ms[0m
+[90m9:42PM[0m [32mINF[0m [1mno leaks found[0m
+    • relic.buildwithoracle.com/report* (Will match assets: public/report*)
+Uploaded 1 of 1 asset
+✨ Success! Uploaded 1 file (1.88 sec)
+Uploaded relic-report (6.69 sec)
+Deployed relic-report triggers (2.50 sec)
+  relic.buildwithoracle.com/report* (zone name: buildwithoracle.com)
+Current Version ID: 14b9620b-b57b-4c41-9b4d-c56f507eb1c2
+(exit 0 · 21.6 s)

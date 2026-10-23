@@ -1,0 +1,7 @@
+$ relic-extract run --no-after
+relic-extract: /Users/beta/.relic-scan -> /Users/beta/.relic-extract · config /Users/beta/.arra/relic.toml
+extract text: 0 month(s) cut -> /Users/beta/.relic-extract/text
+extract thinking: 0 month(s) cut -> /Users/beta/.relic-extract/thinking
+extract tools: 0 month(s) cut -> /Users/beta/.relic-extract/tools
+0 part(s) cut in 0.1s · 0 chunks · 0 messages cleaned out
+(exit 0 · 0.1 s)
