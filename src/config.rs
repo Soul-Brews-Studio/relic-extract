@@ -47,9 +47,15 @@ drop_tags = ["task-notification", "subagent_notification", "goal_context", "hook
 drop_prefixes = ["Stop hook feedback:", "Base directory for this skill:", "[Request interrupted by user",
                  "Caveat: The messages below were generated", "# AGENTS.md instructions", "API Error:",
                  "No response requested.", "[Image: original ", "Tool loaded.",
-                 "[Workflow harness — user request]"]   # the last: a copy of the human's request, kept in the main session
+                 "[Workflow harness — user request]",   # a copy of the human's request, kept in the main session
+                 "# /loop — schedule a recurring",        # the /loop skill body, sent on every tick
+                 "Warning: The maximum number of unified exec processes"]   # codex harness warning
+drop_texts = ["(holding)", "Holding, unchanged.", "Unchanged. Re-arming.", "No change since last check.", "Idle.",
+              "(silent — home)", "⏳", "_(quiet — codex parked, board unchanged)_ 🌱", "Prompt is too long",
+              "health-check-ping"]   # the whole message, after trimming: loop status chatter, an API echo, a probe
 drop_invisible = true           # nothing but whitespace / zero-width characters
 min_chars = 0                   # v3 used 24; 0 = keep short messages
+drop_over_chars = 1000000       # a pasted dump (a 5.2 M-char crash report); 0 = keep every length
 redact = true                   # WireGuard keys, Telegram / Discord tokens, Discord webhooks -> [kind:abcd…N]
 
 [extract.streams.thinking]
@@ -77,9 +83,14 @@ fn clean_defaults() -> Value {
         "drop_prefixes": ["Stop hook feedback:", "Base directory for this skill:", "[Request interrupted by user",
                           "Caveat: The messages below were generated", "# AGENTS.md instructions", "API Error:",
                           "No response requested.", "[Image: original ", "Tool loaded.",
-                          "[Workflow harness — user request]"],
+                          "[Workflow harness — user request]", "# /loop — schedule a recurring",
+                          "Warning: The maximum number of unified exec processes"],
+        "drop_texts": ["(holding)", "Holding, unchanged.", "Unchanged. Re-arming.", "No change since last check.", "Idle.",
+                       "(silent — home)", "⏳", "_(quiet — codex parked, board unchanged)_ 🌱", "Prompt is too long",
+                       "health-check-ping"],
         "drop_invisible": true,
         "min_chars": 0,
+        "drop_over_chars": 1000000,
         "redact": true,
     })
 }

@@ -6,7 +6,8 @@
 //!                      "args" -> "/x a" (dropped when there are no args) · "drop" · "keep" as it is
 //!   3. trim            whitespace and zero-width characters at both ends
 //!   4. drop            empty · no visible character (drop_invisible) · starts with <tag of drop_tags ·
-//!                      starts with one of drop_prefixes · fewer than min_chars characters
+//!                      starts with one of drop_prefixes · is exactly one of drop_texts (status chatter) ·
+//!                      fewer than min_chars characters · more than drop_over_chars (a pasted dump)
 //!   5. redact          secrets relic-scan's 10 rules miss: WireGuard keys, Telegram bot tokens, Discord webhooks
 //!                      and bot tokens, written as [kind:abcd…N] like relic-scan does
 //! ```
@@ -35,7 +36,9 @@ pub enum Drop {
     Prefix(usize), // index in drop_prefixes
     Command,
     Short,
-    Stripped, // nothing left once strip_tags ran
+    Stripped,    // nothing left once strip_tags ran
+    Text(usize), // index in drop_texts
+    Long,
 }
 
 impl Drop {
@@ -49,6 +52,8 @@ impl Drop {
             Drop::Command => "command",
             Drop::Short => "short",
             Drop::Stripped => "stripped",
+            Drop::Text(_) => "text",
+            Drop::Long => "long",
         }
     }
 }
@@ -66,8 +71,10 @@ pub struct Clean {
     commands: Commands,
     drop_tags: Vec<String>,
     drop_prefixes: Vec<String>,
+    drop_texts: Vec<String>,
     drop_invisible: bool,
     min_chars: usize,
+    drop_over_chars: usize,
     redact: bool,
 }
 
@@ -173,8 +180,10 @@ impl Clean {
             commands,
             drop_tags: strs(&c["drop_tags"]),
             drop_prefixes: strs(&c["drop_prefixes"]),
+            drop_texts: strs(&c["drop_texts"]),
             drop_invisible: c["drop_invisible"] != false,
             min_chars: c["min_chars"].as_u64().unwrap_or(0) as usize,
+            drop_over_chars: c["drop_over_chars"].as_u64().unwrap_or(0) as usize,
             redact: c["redact"] != false,
         })
     }
@@ -187,6 +196,8 @@ impl Clean {
             Drop::Command => "command without args".into(),
             Drop::Short => format!("shorter than {} chars", self.min_chars),
             Drop::Stripped => "only stripped tags".into(),
+            Drop::Text(i) => format!("text {:?}", self.drop_texts[*i]),
+            Drop::Long => format!("longer than {} chars", self.drop_over_chars),
             other => other.class().into(),
         }
     }
@@ -249,8 +260,15 @@ impl Clean {
         if let Some(i) = self.drop_prefixes.iter().position(|p| t.starts_with(p.as_str())) {
             return Err(Drop::Prefix(i));
         }
+        if let Some(i) = self.drop_texts.iter().position(|x| t == x.as_str()) {
+            return Err(Drop::Text(i));
+        }
         if self.min_chars > 0 && t.chars().count() < self.min_chars {
             return Err(Drop::Short);
+        }
+        // bytes bound characters from above: count only when the bytes could exceed the limit
+        if self.drop_over_chars > 0 && t.len() > self.drop_over_chars && t.chars().count() > self.drop_over_chars {
+            return Err(Drop::Long);
         }
         let t = if t.len() == s.len() { s } else { Cow::Owned(t.to_string()) };
         Ok(if self.redact {
@@ -325,6 +343,19 @@ mod tests {
         k.min_chars = 5;
         assert_eq!(k.apply("ทำต่อ").unwrap(), "ทำต่อ"); // 5 characters, 15 bytes
         assert_eq!(k.apply("ok"), Err(Drop::Short));
+    }
+
+    #[test]
+    fn drops_status_chatter_and_dumps() {
+        let mut k = c();
+        k.drop_texts = vec!["(holding)".into()];
+        k.drop_over_chars = 5;
+        assert_eq!(k.apply("  (holding)\n"), Err(Drop::Text(0)));
+        assert_eq!(k.apply("(holding) the rest"), Err(Drop::Long));
+        assert_eq!(k.apply("ทำต่อนะ").unwrap_err(), Drop::Long); // 7 characters
+        assert_eq!(k.apply("ทำต่อ").unwrap(), "ทำต่อ"); // 5 characters, 15 bytes: kept
+        assert_eq!(k.label(&Drop::Text(0)), "text \"(holding)\"");
+        assert_eq!(k.label(&Drop::Long), "longer than 5 chars");
     }
 
     #[test]
