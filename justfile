@@ -68,3 +68,11 @@ report:
 # counts only, no names or example text -> ~/.relic-extract/report-public/index.html
 report-public:
     uv run python report/build.py --public
+
+# publish the share view (no quoted text) to relic.buildwithoracle.com/report; refuses if gitleaks finds anything
+publish:
+    uv run python report/build.py --share
+    gitleaks dir ~/.relic-extract/report-share --no-banner --redact
+    rm -rf report/site/public && mkdir -p report/site/public/report
+    cp ~/.relic-extract/report-share/index.html report/site/public/report/index.html
+    cd report/site && npx -y wrangler@4 deploy
