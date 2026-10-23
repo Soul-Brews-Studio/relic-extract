@@ -6,7 +6,7 @@
 //!   relic-extract status      per stream: months cut, chunks, distinct texts, newest ts
 
 use clap::{Parser, Subcommand};
-use relic_extract::{analyse, config, extract, run};
+use relic_extract::{analyse, config, extract, run, tui};
 
 #[derive(Parser)]
 #[command(
@@ -44,6 +44,18 @@ enum Cmd {
     },
     /// Per stream: months, chunks, distinct texts, newest message
     Status,
+    /// The analyse report in the terminal: overview, months, clean rules with samples, biggest, repeats, repos
+    Tui {
+        /// only these months, comma separated: 2026-09,2026-10
+        #[arg(long)]
+        months: Option<String>,
+        /// the stream to look at
+        #[arg(long, default_value = "text")]
+        stream: String,
+        /// start with a what-if: "min_chars=24 ; max_chars=2000"
+        #[arg(long = "what-if", value_name = "KEY=VALUE[ ; …]", default_value = "")]
+        what_if: String,
+    },
     /// What a run would cut and what the clean step takes out, without writing anything
     Analyse {
         /// only these months, comma separated: 2026-09,2026-10
@@ -123,6 +135,13 @@ fn main() {
             );
         }
         Cmd::Status => run::status(&cfg),
+        Cmd::Tui { months, stream, what_if } => {
+            if !config::STREAMS.contains(&stream.as_str()) {
+                fail(format!("unknown stream {stream} (known: {})", config::STREAMS.join(", ")));
+            }
+            let months = months.map(|m| m.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect());
+            tui::tui(cfg, months, &stream, &what_if).unwrap_or_else(|e| fail(e));
+        }
         Cmd::Analyse {
             months,
             stream,
