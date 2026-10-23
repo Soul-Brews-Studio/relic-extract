@@ -3,8 +3,11 @@
     RELIC4_ROOT=~/relic4-fresh uv run --project ../agent-relic-v4 python report/memory.py   -> ~/.relic-extract/report/memory.json
 
 For every oracle with both a vault (vaults.py) and main-session prompts:
-  recall   share of its prompts whose nearest note in its own vault is within cosine 0.80 ("the vault knows this")
-  unasked  share of its notes with no prompt of its own within 0.80 ("written, never asked about")
+  recall   share of its prompts whose best own-vault note beats the 90th percentile of the same prompts' best note in an
+           equal-sized sample of other oracles' vaults ("the vault clearly knows this")
+  wins     share of its prompts whose own vault beats that sample at all
+  unasked  share of its notes no closer to its own prompts than the median note is to other oracles' prompts
+A fixed cosine cutoff does not work here: a short prompt and a long note are rarely closer than 0.7 (median 0.5-0.7).
   writing  notes per month by section (memory/learnings, retrospectives, inbox, …) next to its prompts per month
 Plus, over all vaults: notes written per month by section, and the sections' share of the whole.
 Samples: up to 1,500 prompts and 1,500 notes per oracle, fixed seed.
@@ -24,7 +27,6 @@ import common
 HOME = Path.home()
 OUT = HOME / ".relic-extract" / "report"
 ROOT = Path(os.environ.get("RELIC4_ROOT", HOME / "relic4-fresh")).expanduser()
-NEAR = 0.80
 
 
 def unit(a):
@@ -55,6 +57,8 @@ def main():
     kix = {k: i for i, k in enumerate(kv.column("key").to_pylist())}
     print(f"memory: {len(cats)} oracles with a vault and prompts · {len(kix):,} vectors · {time.time() - t0:.0f}s")
     rng = np.random.default_rng(0)
+    other_notes = sorted({kix[k] for k, in con.execute("select key from nk").fetchall() if k in kix})
+    other_prompts = sorted({kix[k] for k, in con.execute("select key from pk where cat in (select unnest(?::varchar[]))", [cats]).fetchall() if k in kix})
     months = [r[0] for r in con.execute("select distinct m from pk order by 1").fetchall()]
     mi = {m: i for i, m in enumerate(months)}
     oracles = []
@@ -66,10 +70,16 @@ def main():
             continue
         P = V[rng.choice(pks, size=min(1500, len(pks)), replace=False)]
         N = V[rng.choice(nks, size=min(1500, len(nks)), replace=False)]
-        S = P @ N.T
-        recall = float((S.max(1) >= NEAR).mean())
-        Nall, Pall = V[nks], V[pks]
-        unasked = float(((N @ Pall.T).max(1) < NEAR).mean())
+        # the baseline: an equal-sized sample of other oracles' notes, and of other oracles' prompts
+        other_n = [i for i in other_notes if i not in set(nks)]
+        other_p = [i for i in other_prompts if i not in set(pks)]
+        On = V[rng.choice(other_n, size=min(len(N), len(other_n)), replace=False)]
+        Op = V[rng.choice(other_p, size=min(len(P), len(other_p)), replace=False)]
+        own_best, base_best = (P @ N.T).max(1), (P @ On.T).max(1)
+        recall = float((own_best > np.percentile(base_best, 90)).mean())      # clearly better than chance
+        wins = float((own_best > base_best).mean())                            # own vault beats other vaults
+        n_own, n_base = (N @ P.T).max(1), (N @ Op.T).max(1)
+        unasked = float((n_own < np.percentile(n_base, 50)).mean())           # no closer to its own prompts than to others'
         secs = Counter(top_section(s) for _, _, s in nrows)
         writing = defaultdict(lambda: [0] * len(months))
         for _, m, s in nrows:
@@ -79,7 +89,7 @@ def main():
         for m, n in con.execute("select m, count(*) from pk where cat = ? group by 1", [cat]).fetchall():
             pm[mi[m]] = n
         oracles.append(dict(name=cat, prompts=len(pks), notes=len(nrows), distinct_notes=len(nks), recall=round(recall, 4),
-                            unasked=round(unasked, 4), sections=secs.most_common(8),
+                            wins=round(wins, 4), unasked=round(unasked, 4), best_p50=round(float(np.median(own_best)), 3), sections=secs.most_common(8),
                             learnings=secs.get("memory/learnings", 0), retros=secs.get("memory/retrospectives", 0),
                             prompts_by_month=pm, notes_by_month={k: v for k, v in writing.items() if sum(v)}))
     oracles.sort(key=lambda o: -o["prompts"])
@@ -91,14 +101,14 @@ def main():
             by_month[top_section(sec)][mi[m]] += n
     keep = [s for s, _ in allsec.most_common(7)]
     other = [sum(v[i] for s, v in by_month.items() if s not in keep) for i in range(len(months))]
-    out = dict(built=time.strftime("%Y-%m-%d %H:%M"), months=months, near=NEAR, oracles=oracles,
+    out = dict(built=time.strftime("%Y-%m-%d %H:%M"), months=months, oracles=oracles,
                sections=allsec.most_common(12), notes_by_month={**{s: by_month[s] for s in keep}, "other": other},
                totals=dict(notes=sum(allsec.values()), vaults=con.execute("select count(distinct cat) from nk").fetchall()[0][0]))
     (OUT / "memory.json").write_text(json.dumps(out, ensure_ascii=False, indent=1))
     (OUT / "memory.json").chmod(0o600)
     print(f"memory: {len(oracles)} oracles · {time.time() - t0:.0f}s -> {OUT / 'memory.json'}")
     for o in oracles[:14]:
-        print(f"  {o['name'][:30]:<30} prompts {o['prompts']:>6,} notes {o['notes']:>6,} recall {o['recall']:.0%} unasked {o['unasked']:.0%} learnings {o['learnings']}")
+        print(f"  {o['name'][:30]:<30} prompts {o['prompts']:>6,} notes {o['notes']:>6,} recall {o['recall']:.0%} wins {o['wins']:.0%} unasked {o['unasked']:.0%} best p50 {o['best_p50']}")
 
 
 if __name__ == "__main__":
