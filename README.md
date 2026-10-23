@@ -83,8 +83,10 @@ strip_tags = ["system-reminder"]                 # <tag>…</tag> removed anywhe
 commands = "args"               # slash commands: "args" -> "/goal <args>" (none: dropped) | "drop" | "keep"
 drop_tags = ["task-notification", "subagent_notification", "goal_context", "hook_prompt", "local-command-stdout", …]
 drop_prefixes = ["Stop hook feedback:", "Base directory for this skill:", "[Request interrupted by user", …]
+drop_texts = ["(holding)", "Idle.", "Prompt is too long", …]   # the whole message: loop status chatter, echoes
 drop_invisible = true           # nothing but whitespace / zero-width characters
 min_chars = 0                   # v3 used 24; 0 = keep short messages
+drop_over_chars = 1000000       # a pasted dump; 0 = keep every length
 redact = true                   # WireGuard keys, Telegram / Discord tokens, Discord webhooks -> [kind:abcd…N]
 
 [extract.streams.thinking]
