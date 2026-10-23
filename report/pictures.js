@@ -35,15 +35,22 @@ if (DATA.pictures) {
           }
         }
         g.globalAlpha = 1;
-        g.font = "600 15px system-ui, -apple-system, sans-serif";
-        g.textAlign = "center";
+        g.textAlign = "left";
+        const placed = [];   // label boxes already drawn: a new one moves down until it overlaps none, or is skipped
+        const hit = (b) => placed.some((q) => b.x < q.x + q.w && q.x < b.x + b.w && b.y < q.y + q.h && q.y < b.y + b.h);
         for (const l of Mp.labels) {
-          const px = 20 + (l.x / 1000) * (W - 40), py = 20 + (1 - l.y / 1000) * (H - 40);
+          g.font = "600 15px system-ui, -apple-system, sans-serif";
+          const tw = Math.max(g.measureText(l.name).width, 40);
+          let px = 20 + (l.x / 1000) * (W - 40) - tw / 2, py = 20 + (1 - l.y / 1000) * (H - 40);
+          px = Math.max(6, Math.min(W - tw - 6, px));           // stay inside the canvas
+          let box = { x: px - 3, y: py - 15, w: tw + 6, h: 36 }, tries = 0;
+          while (hit(box) && tries++ < 6) { py += 20; box = { ...box, y: py - 15 }; }
+          if (hit(box) || py > H - 20) continue;
+          placed.push(box);
           g.lineWidth = 4; g.strokeStyle = css("--surface"); g.fillStyle = css("--ink");
           g.strokeText(l.name, px, py); g.fillText(l.name, px, py);
           g.font = "13px system-ui, -apple-system, sans-serif"; g.fillStyle = css("--ink-2");
           g.strokeText(fmtP(l.share), px, py + 16); g.fillText(fmtP(l.share), px, py + 16);
-          g.font = "600 15px system-ui, -apple-system, sans-serif";
         }
       };
       draw();

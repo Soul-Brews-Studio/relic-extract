@@ -126,6 +126,7 @@ every run: a watcher can use that as the finished marker instead.
 | `month`, `sid`, `ts`, `ts_th`, `engine`, `role`, `type`, `kind`, `name` | from the month file |
 | `cat`, `probe` | the session's repo and whether it is an automated probe, from relic-scan's `meta/sessions.parquet` |
 | `text` | the chunk |
+| `src_agent`, `src_path`, `src_line` | where the kept row was read: the first entry of relic-scan's `sources` ("<agent>:<path>:<line>"), NULL when none |
 
 `<stream>/_extract.json` records the settings a stream was cut with. Change them and every month of that stream is cut again.
 

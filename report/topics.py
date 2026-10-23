@@ -57,6 +57,24 @@ def tokens(text, thai_cut, thai_stop):
     return out
 
 
+def fuzzy_name(terms, names, used, prefix=""):
+    """A hand-given name whose 3 words are, 2 or more of them, among this topic's top 6 words (each name used once):
+    near-equal word scores swap places between runs, so an exact match on the top 3 drops names that still fit."""
+    top = set(terms[:6])
+    best, score = None, 1
+    for k, v in names.items():
+        if prefix and not k.startswith(prefix + ":"):
+            continue
+        words = set(k.split(":", 1)[-1].split(" · "))
+        hit = len(words & top)
+        if hit > score and k not in used:
+            best, score = k, hit
+    if best:
+        used.add(best)
+        return names[best]
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scan", default=str(HOME / ".relic-scan"))
@@ -152,11 +170,18 @@ def main():
     # words, the name falls away and the words show instead of a stale name
     names_f = Path(__file__).parent / "topic-names.json"
     names = json.loads(names_f.read_text()) if names_f.exists() else {}
+    used = set()
     for t in out["topics"]:
         fp = " · ".join(sorted(t["terms"][:3]))  # order-free: near-equal scores swap places between runs
         t["fingerprint"] = fp
         if fp in names:
             t["name"] = names[fp]
+            used.add(fp)
+    for t in out["topics"]:
+        if "name" not in t:
+            nm = fuzzy_name(t["terms"], names, used)
+            if nm:
+                t["name"] = nm
     named = sum(1 for t in out["topics"] if "name" in t)
     print(f"topics: {named}/{a.k} named from {names_f.name}")
     dst = Path(a.out or Path(a.extract).expanduser() / "report").expanduser()

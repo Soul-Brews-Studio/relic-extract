@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::Path;
 
-use arrow::array::{Array, ArrayRef, AsArray, BooleanArray, GenericStringArray, Int64Array, RecordBatch, StringViewArray};
+use arrow::array::{Array, ArrayRef, AsArray, BooleanArray, GenericStringArray, Int64Array, ListArray, RecordBatch, StringViewArray};
 use arrow::compute::filter_record_batch;
 use arrow::datatypes::DataType;
 use parquet::arrow::ProjectionMask;
@@ -62,6 +62,22 @@ pub struct Cols {
     pub body: Str,
     pub err: Option<BooleanArray>,
     pub field: Str, // the stream's field (text or body)
+    pub sources: Option<ListArray>, // relic-scan's "<agent>:<path>:<line>" per copy of the row
+}
+
+impl Cols {
+    /// The first entry of row i's `sources`, if any.
+    pub fn first_source(&self, i: usize) -> Option<String> {
+        let l = self.sources.as_ref()?;
+        if l.is_null(i) {
+            return None;
+        }
+        let v = l.value(i);
+        if v.is_empty() || v.is_null(0) {
+            return None;
+        }
+        Str::of(Some(&v)).get(0).map(str::to_string)
+    }
 }
 
 fn col(b: &RecordBatch, n: &str) -> Str {
@@ -77,7 +93,7 @@ fn ints(b: &RecordBatch, n: &str) -> Result<Int64Array, String> {
 /// The columns stream `s` needs: msgkey's inputs, the filters, the output, and the stream's field.
 pub fn columns(s: &str, field: &str) -> Vec<String> {
     let mut v: Vec<&str> = vec![
-        "s", "h", "idx", "engine", "role", "type", "sid", "ts", "ts_th", "kind", "name",
+        "s", "h", "idx", "engine", "role", "type", "sid", "ts", "ts_th", "kind", "name", "sources",
     ];
     if s == "tools" {
         v.extend(["call_id", "body", "err"]);
@@ -139,6 +155,7 @@ pub fn month(path: &Path, s: &str, field: &str) -> Result<Vec<Cols>, String> {
                 .column_by_name("err")
                 .and_then(|a| a.as_any().downcast_ref::<BooleanArray>().cloned()),
             field: col(&b, field),
+            sources: b.column_by_name("sources").and_then(|a| a.as_any().downcast_ref::<ListArray>().cloned()),
         });
     }
     Ok(out)

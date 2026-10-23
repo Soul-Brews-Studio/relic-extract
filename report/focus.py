@@ -44,6 +44,24 @@ def clean(s, n=200):
     return re.sub(r"\s+", " ", s or "")[:n]
 
 
+def fuzzy_name(terms, names, used, prefix=""):
+    """A hand-given name whose 3 words are, 2 or more of them, among this topic's top 6 words (each name used once):
+    near-equal word scores swap places between runs, so an exact match on the top 3 drops names that still fit."""
+    top = set(terms[:6])
+    best, score = None, 1
+    for k, v in names.items():
+        if prefix and not k.startswith(prefix + ":"):
+            continue
+        words = set(k.split(":", 1)[-1].split(" · "))
+        hit = len(words & top)
+        if hit > score and k not in used:
+            best, score = k, hit
+    if best:
+        used.add(best)
+        return names[best]
+    return None
+
+
 def main():
     t0 = time.time()
     con = common.connect(HOME / ".relic-scan", HOME / ".relic-extract")
@@ -77,6 +95,7 @@ def main():
         print(f"focus: lessons skipped ({ex.__class__.__name__})")
 
     out = {"months": months, "story": story, "families": {}}
+    used = set()
     for fam in FAMILIES:
         con.execute(f"create or replace table fp as select * from pr where fam = '{fam}'")
         n_msgs = con.execute("select count(distinct msgkey) from fp").fetchall()[0][0]
@@ -133,10 +152,16 @@ def main():
             near = sorted(idx[np.argsort(-sim[idx])][:30], key=lambda i: (len(texts[i]) > 220, -sim[i]))[:4]
             fp_ = " · ".join(sorted(terms[:3]))
             months_c = fm[c]
-            feats.append(dict(id=c, terms=terms, fingerprint=fp_, name=names.get(f"{fam}:{fp_}"), msgs=int(sum(months_c)),
+            nm = names.get(f"{fam}:{fp_}")
+            if nm:
+                used.add(f"{fam}:{fp_}")
+            feats.append(dict(id=c, terms=terms, fingerprint=fp_, name=nm, msgs=int(sum(months_c)),
                               months=months_c, peak=months[int(np.argmax(months_c))] if sum(months_c) else None,
                               first=next((months[i] for i, v in enumerate(months_c) if v), None),
                               repos=cat_of[c].most_common(3), examples=[clean(texts[i], 180) for i in near]))
+        for ft in feats:
+            if not ft["name"]:
+                ft["name"] = fuzzy_name(ft["terms"], names, used, fam)
         feats.sort(key=lambda f: (f["first"] or "", -f["msgs"]))
 
         # tools and skills in the family's sessions

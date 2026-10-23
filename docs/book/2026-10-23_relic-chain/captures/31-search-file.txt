@@ -1,0 +1,6 @@
+$ RELIC4_ROOT=~/relic4-fresh just search semantics_14_umap_map -n 3 --mode icu
+74 ms · text/icu 1, tools/icu 4 · '=' both lanes · read one: RELIC4_ROOT=/Users/beta/relic4-fresh relic4 show <msgkey>
+  0.0164  text     2026-10-23T20:42  assistant  relic-extract          0ae83e60860e  The three charts in your screenshots were made by **neo-oracle**. relic3 couldn't find their code; our new index could, and I've r
+  0.0164  tools    2026-10-22T08:43  Bash       neo-oracle             7bc5203c1fed  {"command":"f=$(rg -l --no-messages 'semantics_14_umap_map' ~/.claude/workflow-attic | head -1); rg -o --no-messages '.{0,200}sema
+  0.0161  tools    2026-10-22T08:43  Bash       neo-oracle             9f31a69ee42c  {"command":"F=$(rg -l --no-messages 'semantics_14_umap_map' ~/.claude/workflow-attic | head -3); for f in $F; do python3 - \"$f\" 
+(exit 0 · 0.8 s)

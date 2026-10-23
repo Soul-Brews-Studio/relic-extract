@@ -1,0 +1,3 @@
+$ relic3 search semantics_14_umap_map --all-tiers --horizon archive
+no matches for semantics_14_umap_map across 53 weeks (126 ms)  ·  horizon archive
+(exit 0 · 0.3 s)

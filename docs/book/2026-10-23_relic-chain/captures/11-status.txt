@@ -1,0 +1,5 @@
+$ relic-extract status
+text      on   15 months · 810,642 chunks · 725,318 distinct texts · newest 2026-10-23T14:29:23.585Z
+thinking  on   15 months · 101,995 chunks · 100,013 distinct texts · newest 2026-10-23T14:29:30.043Z
+tools     on   15 months · 1,811,424 chunks · 1,622,158 distinct texts · newest 2026-10-23T14:29:30.754Z
+(exit 0 · 0.6 s)

@@ -69,6 +69,10 @@ asks:
 focus:
     uv run --project ../agent-relic-v4 --with scikit-learn --with pythainlp python report/focus.py
 
+# did the work land: prompts against git history and vault notes -> ~/.relic-extract/report/work.json
+work:
+    uv run python report/work.py
+
 # oracles: born, for what, how long, used, works -> ~/.relic-extract/report/oracles.json
 oracles:
     uv run python report/oracles.py

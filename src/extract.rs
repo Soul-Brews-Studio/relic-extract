@@ -27,10 +27,22 @@ use parquet::file::properties::WriterProperties;
 use crate::config::{self, Config};
 use crate::read::{self, Cols};
 
-pub const NAMES: [&str; 17] = [
+pub const NAMES: [&str; 20] = [
     "key", "msgkey", "chunk", "h", "n_h", "month", "sid", "ts", "ts_th", "engine", "role", "type", "kind", "name", "cat",
-    "probe", "text",
+    "probe", "text", "src_agent", "src_path", "src_line",
 ];
+
+/// "<agent>:<path>:<line>" (relic-scan's sources entry) -> (agent, path, line); the agent ends at the first ':',
+/// the line starts after the last one.
+pub fn split_source(s: &str) -> (Option<&str>, Option<&str>, Option<i64>) {
+    let Some((agent, rest)) = s.split_once(':') else { return (None, Some(s), None) };
+    match rest.rsplit_once(':') {
+        Some((path, line)) if line.chars().all(|c| c.is_ascii_digit()) && !line.is_empty() => {
+            (Some(agent), Some(path), line.parse().ok())
+        }
+        _ => (Some(agent), Some(rest), None),
+    }
+}
 
 /// Same cut as jsonl-truth embed/export.py and relic4 split.py: characters (code points), not bytes.
 pub fn chunks(text: &str, max_chars: usize, overlap: usize) -> Vec<&str> {
@@ -259,11 +271,12 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path, 
     let batches = read_stream(cfg, name, src)?;
     let kept = select(cfg, name, &batches, false);
     let mut sb: Vec<StringBuilder> = (0..NAMES.len()).map(|_| StringBuilder::new()).collect();
-    let (mut chunk_b, mut h_b, mut nh_b, mut probe_b) = (
+    let (mut chunk_b, mut h_b, mut nh_b, mut probe_b, mut line_b) = (
         Int64Builder::new(),
         Int64Builder::new(),
         Int64Builder::new(),
         BooleanBuilder::new(),
+        Int64Builder::new(),
     );
     let mut keys = std::collections::HashSet::new();
     let mut n = 0usize;
@@ -287,10 +300,13 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path, 
         let pieces = pieces(cfg, name, body);
         let sid = c.sid.get(i);
         let (cat, probe) = sid.and_then(|s| sess.get(s)).cloned().unwrap_or((None, None));
+        // the source of the row kept for the message (the smallest h, idx: the same row msgkey comes from)
+        let src = c.first_source(i);
+        let (s_agent, s_path, s_line) = src.as_deref().map_or((None, None, None), split_source);
         for (ci, piece) in pieces.into_iter().enumerate() {
             let k = key(piece);
             let mk = hex(&p.msgkey);
-            let vals: [Option<&str>; 17] = [
+            let vals: [Option<&str>; 20] = [
                 Some(&k),
                 Some(&mk),
                 None,
@@ -308,9 +324,12 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path, 
                 Some(cat.as_deref().unwrap_or("(no session)")),
                 None,
                 Some(piece),
+                s_agent,
+                s_path,
+                None,
             ];
             for (j, v) in vals.iter().enumerate() {
-                if !matches!(NAMES[j], "chunk" | "h" | "n_h" | "probe") {
+                if !matches!(NAMES[j], "chunk" | "h" | "n_h" | "probe" | "src_line") {
                     sb[j].append_option(*v);
                 }
             }
@@ -318,6 +337,7 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path, 
             h_b.append_value(c.h.value(i));
             nh_b.append_value(p.n);
             probe_b.append_value(probe.unwrap_or(false));
+            line_b.append_option(s_line);
             keys.insert(k);
             n += 1;
         }
@@ -330,6 +350,7 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path, 
             "h" => (Arc::new(h_b.finish()), DataType::Int64),
             "n_h" => (Arc::new(nh_b.finish()), DataType::Int64),
             "probe" => (Arc::new(probe_b.finish()), DataType::Boolean),
+            "src_line" => (Arc::new(line_b.finish()), DataType::Int64),
             _ => (Arc::new(sb[j].finish()), DataType::Utf8),
         };
         cols.push(a);
@@ -389,6 +410,21 @@ pub fn num(n: usize) -> String {
         out.push(c);
     }
     out
+}
+
+#[cfg(test)]
+mod source_tests {
+    use super::split_source;
+
+    #[test]
+    fn splits_agent_path_line() {
+        assert_eq!(
+            split_source("beta@m5:/Users/beta/.claude/projects/x/a.jsonl:12"),
+            (Some("beta@m5"), Some("/Users/beta/.claude/projects/x/a.jsonl"), Some(12))
+        );
+        assert_eq!(split_source("nat@white:C:/odd:path.jsonl:7"), (Some("nat@white"), Some("C:/odd:path.jsonl"), Some(7)));
+        assert_eq!(split_source("agent:/no/line.jsonl"), (Some("agent"), Some("/no/line.jsonl"), None));
+    }
 }
 
 #[cfg(test)]

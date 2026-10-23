@@ -1,0 +1,15 @@
+$ cat ~/relic4-fresh/vec/streams/*/tools._meta.json
+{
+ "stream": "tools",
+ "model": "unsloth/embeddinggemma-300m",
+ "dim": 768,
+ "rows": 1802946,
+ "distinct": 1613924,
+ "embedded_now": 1613924,
+ "from_cache": 0,
+ "embed_s": 1733.2,
+ "write_s": 22.3,
+ "fts_s": 12.5,
+ "total_s": 1769.0,
+ "built_at": "2026-10-23T20:19:00+0700"
+}(exit 0 · 0.0 s)

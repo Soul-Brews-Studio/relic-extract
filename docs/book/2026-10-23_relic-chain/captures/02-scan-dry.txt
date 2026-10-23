@@ -1,0 +1,13 @@
+$ relic-scan run --dry-run
+
+  scan ⠸ 2,434,590 entries walked · 1,535 homes · 128,871 .jsonl listed · 15s
+run: 1,046 folders could not be read (no permission); a transcript inside them is not seen
+ledger: 0 copies (not read) · 0 read from a known version · 0 whose past changed · 5,309 never seen
+run: scan 15.5s · new 5,309 · grown 4 · rewritten 0 · unchanged 117,975 · gone 0 · 6.96 GB to read
+╭─ ▓▒░ RELIC·SCAN ░▒▓ ───────────────────────────────────────────╮
+│ dry run · an index would read 5,313 files, 6.96 GB             │
+│ new 5,309 · grown 4 · rewritten 0 · unchanged 117,975 · gone 0 │
+│ scan 15.5s · nothing written                                   │
+│ → ~/.relic-scan                                                │
+╰────────────────────────────────────────────────────────────────╯
+(exit 0 · 15.9 s)
