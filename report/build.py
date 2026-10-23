@@ -239,10 +239,52 @@ def tidy(data, out: Path):
 def page(data):
     html = (HERE / "index.html").read_text()
     css = (HERE / "report.css").read_text()
-    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "days.js", "work.js", "switches.js", "report.js", "pictures.js", "deep.js", "focus.js", "oracles.js", "memory.js", "months.js", "nav.js"))
+    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "days.js", "windows.js", "work.js", "switches.js", "report.js", "pictures.js", "deep.js", "focus.js", "oracles.js", "memory.js", "months.js", "nav.js"))
     html = html.replace("/*I18N*/", (HERE / "i18n.js").read_text())
     blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     return html.replace("/*CSS*/", css).replace("/*JS*/", js).replace("/*DATA*/null", blob)
+
+
+TYPES = ("build", "fix", "ops", "research", "writing", "planning", "mixed")
+
+
+def windows(rep, public, share):
+    """Every window reading, one compact row each: [day, start minute, type, top project, prompts, focus, friction,
+    lesson]. Lanes: blocks.json (3h) and blocks-1h.json on gb300, readings-<unit>-<lane>-<model>[-deep].json.
+    The share view keeps type, project and count, not the model's sentences; the public view keeps type and count."""
+    lanes = {}
+
+    def row(day, m0, rd, shape):
+        ty = rd.get("type") if rd.get("type") in TYPES else "mixed"
+        txt = not (public or share)
+        return [day, m0, ty, None if public else shape.get("top_project"), shape.get("prompts", 0),
+                rd.get("focus") if txt else None, rd.get("friction") if txt else None, rd.get("lesson") if txt else None]
+
+    for f, unit in (("blocks.json", "3h"), ("blocks-1h.json", "1h")):
+        if (rep / f).exists():
+            b = json.loads((rep / f).read_text())
+            rows = [row(x["day"], x["h0"] * 60, x.get("reading") or {}, x.get("shape") or {}) for x in b["blocks"]]
+            lanes[f"{unit} gb300"] = dict(unit=unit, host="gb300", model=b.get("model"), deep=False, built=b.get("built"),
+                                          rows=sorted(rows, key=lambda r: (r[0], r[1])),
+                                          summary=None if public else b.get("summary"))
+    for f in sorted(rep.glob("readings-*.json")):
+        if f.name.startswith("readings-cache"):
+            continue
+        r = json.loads(f.read_text())
+        lane = r["model"].split(":", 1)[0]
+        if r["unit"] in ("3h", "1h") and lane == "gb300":
+            continue  # the blocks files already carry these
+        rows = []
+        for w in r["windows"]:
+            lab = w["window"]
+            day, m0 = lab[:10], (int(lab[11:13]) * 60 + int(lab[14:16])) if len(lab) > 10 else 0
+            rows.append(row(day, m0, w.get("reading") or {}, w.get("shape") or {}))
+        if len(rows) < 30:
+            continue  # a trial run (--limit), not a lane
+        lanes[f"{r['unit']} {lane}{' deep' if r.get('deep') else ''}"] = dict(
+            unit=r["unit"], host=lane, model=r["model"].split(":", 1)[1], deep=r.get("deep", False), built=r.get("built"),
+            rows=sorted(rows, key=lambda x: (x[0], x[1])), summary=None)
+    return lanes
 
 
 def share(data):
@@ -303,6 +345,9 @@ def main():
                 if a.public:
                     d["repos"] = []
         data["days"] = dd
+    lanes = windows(Path(a.extract).expanduser() / "report", a.public, a.share)
+    if lanes:  # blocks.py and readings.py: what each 3h/1h/15m window was, on gb300 and z.ai
+        data["windows"] = lanes
     pp = Path(a.extract).expanduser() / "report" / "pictures.json"
     if pp.exists() and not a.public:  # pictures.py's output: topic names and typed words, no passages
         data["pictures"] = json.loads(pp.read_text())

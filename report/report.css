@@ -163,3 +163,11 @@ canvas.semmap { display: block; width: 100%; height: auto; background: var(--sur
 table.days td:first-child { width: 48px; }
 .dtype { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink-2);
   border: 1px solid var(--ring); border-radius: 999px; padding: 1px 8px; margin-right: 4px; }
+
+.lanes { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.lanes .lane { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--ring);
+  background: var(--surface); color: var(--ink-2); cursor: pointer; }
+.lanes .lane.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.chart.wgrid { width: 100%; height: auto; }
+.blocks { margin-top: 6px; display: grid; gap: 2px; }
+.blocks .lg-box { display: inline-block; vertical-align: middle; }
