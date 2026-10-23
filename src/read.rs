@@ -69,12 +69,16 @@ fn col(b: &RecordBatch, n: &str) -> Str {
 }
 
 fn ints(b: &RecordBatch, n: &str) -> Result<Int64Array, String> {
-    b.column_by_name(n).and_then(|a| a.as_any().downcast_ref::<Int64Array>().cloned()).ok_or(format!("no INT64 column {n}"))
+    b.column_by_name(n)
+        .and_then(|a| a.as_any().downcast_ref::<Int64Array>().cloned())
+        .ok_or(format!("no INT64 column {n}"))
 }
 
 /// The columns stream `s` needs: msgkey's inputs, the filters, the output, and the stream's field.
 pub fn columns(s: &str, field: &str) -> Vec<String> {
-    let mut v: Vec<&str> = vec!["s", "h", "idx", "engine", "role", "type", "sid", "ts", "ts_th", "kind", "name"];
+    let mut v: Vec<&str> = vec![
+        "s", "h", "idx", "engine", "role", "type", "sid", "ts", "ts_th", "kind", "name",
+    ];
     if s == "tools" {
         v.extend(["call_id", "body", "err"]);
     } else {
@@ -94,7 +98,11 @@ pub fn month(path: &Path, s: &str, field: &str) -> Result<Vec<Cols>, String> {
     let want = columns(s, field);
     let idx: Vec<usize> = want.iter().filter_map(|n| b.schema().index_of(n).ok()).collect();
     let mask = ProjectionMask::roots(b.parquet_schema(), idx);
-    let rd = b.with_projection(mask).with_batch_size(32_768).build().map_err(|e| e.to_string())?;
+    let rd = b
+        .with_projection(mask)
+        .with_batch_size(32_768)
+        .build()
+        .map_err(|e| e.to_string())?;
     let mut out = vec![];
     for batch in rd {
         let b = batch.map_err(|e| e.to_string())?;
@@ -106,12 +114,30 @@ pub fn month(path: &Path, s: &str, field: &str) -> Result<Vec<Cols>, String> {
         if keep.true_count() == 0 {
             continue;
         }
-        let b = if keep.true_count() == b.num_rows() { b } else { filter_record_batch(&b, &keep).map_err(|e| e.to_string())? };
+        let b = if keep.true_count() == b.num_rows() {
+            b
+        } else {
+            filter_record_batch(&b, &keep).map_err(|e| e.to_string())?
+        };
         out.push(Cols {
-            len: b.num_rows(), s: col(&b, "s"), h: ints(&b, "h")?, idx: ints(&b, "idx")?, engine: col(&b, "engine"),
-            role: col(&b, "role"), typ: col(&b, "type"), sid: col(&b, "sid"), ts: col(&b, "ts"), ts_th: col(&b, "ts_th"),
-            text: col(&b, "text"), kind: col(&b, "kind"), call_id: col(&b, "call_id"), name: col(&b, "name"),
-            body: col(&b, "body"), err: b.column_by_name("err").and_then(|a| a.as_any().downcast_ref::<BooleanArray>().cloned()),
+            len: b.num_rows(),
+            s: col(&b, "s"),
+            h: ints(&b, "h")?,
+            idx: ints(&b, "idx")?,
+            engine: col(&b, "engine"),
+            role: col(&b, "role"),
+            typ: col(&b, "type"),
+            sid: col(&b, "sid"),
+            ts: col(&b, "ts"),
+            ts_th: col(&b, "ts_th"),
+            text: col(&b, "text"),
+            kind: col(&b, "kind"),
+            call_id: col(&b, "call_id"),
+            name: col(&b, "name"),
+            body: col(&b, "body"),
+            err: b
+                .column_by_name("err")
+                .and_then(|a| a.as_any().downcast_ref::<BooleanArray>().cloned()),
             field: col(&b, field),
         });
     }
@@ -124,7 +150,10 @@ pub type SessionRow = (Option<String>, Option<String>, Option<String>, Option<bo
 pub fn sessions(path: &Path) -> Result<Vec<SessionRow>, String> {
     let e = |x: &dyn std::fmt::Display| format!("{}: {x}", path.display());
     let f = fs::File::open(path).map_err(|x| e(&x))?;
-    let rd = ParquetRecordBatchReaderBuilder::try_new(f).map_err(|x| e(&x))?.build().map_err(|x| e(&x))?;
+    let rd = ParquetRecordBatchReaderBuilder::try_new(f)
+        .map_err(|x| e(&x))?
+        .build()
+        .map_err(|x| e(&x))?;
     let mut out = vec![];
     for batch in rd {
         let batch = batch.map_err(|x| e(&x))?;
@@ -132,10 +161,17 @@ pub fn sessions(path: &Path) -> Result<Vec<SessionRow>, String> {
         if matches!(sid, Str::Missing) || matches!(tier, Str::Missing) {
             return Err(e(&"no sid or tier column"));
         }
-        let probe = batch.column_by_name("probe").and_then(|a| a.as_any().downcast_ref::<BooleanArray>().cloned());
+        let probe = batch
+            .column_by_name("probe")
+            .and_then(|a| a.as_any().downcast_ref::<BooleanArray>().cloned());
         for i in 0..batch.num_rows() {
             let p = probe.as_ref().and_then(|p| (!p.is_null(i)).then(|| p.value(i)));
-            out.push((sid.get(i).map(str::to_string), tier.get(i).map(str::to_string), cat.get(i).map(str::to_string), p));
+            out.push((
+                sid.get(i).map(str::to_string),
+                tier.get(i).map(str::to_string),
+                cat.get(i).map(str::to_string),
+                p,
+            ));
         }
     }
     Ok(out)
@@ -159,7 +195,8 @@ pub fn part_stats(files: &[std::path::PathBuf]) -> Result<(usize, usize, Option<
                     keys.insert(x.to_string());
                 }
                 if let Some(x) = t.get(i)
-                    && last.as_deref().is_none_or(|l| x > l) {
+                    && last.as_deref().is_none_or(|l| x > l)
+                {
                     last = Some(x.to_string());
                 }
             }

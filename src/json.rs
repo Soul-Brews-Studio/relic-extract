@@ -157,12 +157,25 @@ mod tests {
     #[test]
     fn duckdb_escapes_like_duckdb() {
         // DuckDB: to_json(['a/b','q"x','back\slash', chr(10)||chr(9)||chr(13)||chr(8)||chr(12)||chr(1)||chr(31)||chr(127), 'ไทย€😀', NULL])
-        let got = duckdb_list(&[Some("a/b"), Some("q\"x"), Some("back\\slash"), Some("\n\t\r\u{8}\u{c}\u{1}\u{1f}\u{7f}"),
-                                Some("ไทย€😀"), None]);
-        assert_eq!(got, "[\"a/b\",\"q\\\"x\",\"back\\\\slash\",\"\\n\\t\\r\\b\\f\\u0001\\u001F\u{7f}\",\"ไทย€😀\",null]");
+        let got = duckdb_list(&[
+            Some("a/b"),
+            Some("q\"x"),
+            Some("back\\slash"),
+            Some("\n\t\r\u{8}\u{c}\u{1}\u{1f}\u{7f}"),
+            Some("ไทย€😀"),
+            None,
+        ]);
+        assert_eq!(
+            got,
+            "[\"a/b\",\"q\\\"x\",\"back\\\\slash\",\"\\n\\t\\r\\b\\f\\u0001\\u001F\u{7f}\",\"ไทย€😀\",null]"
+        );
         assert_eq!(duckdb_list(&[Some("ab\0c")]), "[\"ab\\u0000c\"]");
         // the streaming form writes the same bytes
-        for items in [vec![Some("a/b"), Some("q\"x\\y\n\u{1}\u{7f}ไทย😀"), None], vec![], vec![Some("")]] {
+        for items in [
+            vec![Some("a/b"), Some("q\"x\\y\n\u{1}\u{7f}ไทย😀"), None],
+            vec![],
+            vec![Some("")],
+        ] {
             let mut buf = vec![];
             duckdb_list_feed(&items, &mut |b| buf.extend_from_slice(b));
             assert_eq!(String::from_utf8(buf).unwrap(), duckdb_list(&items));

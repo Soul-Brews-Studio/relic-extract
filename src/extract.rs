@@ -27,8 +27,10 @@ use parquet::file::properties::WriterProperties;
 use crate::config::{self, Config};
 use crate::read::{self, Cols};
 
-pub const NAMES: [&str; 17] = ["key", "msgkey", "chunk", "h", "n_h", "month", "sid", "ts", "ts_th", "engine", "role", "type",
-                               "kind", "name", "cat", "probe", "text"];
+pub const NAMES: [&str; 17] = [
+    "key", "msgkey", "chunk", "h", "n_h", "month", "sid", "ts", "ts_th", "engine", "role", "type", "kind", "name", "cat",
+    "probe", "text",
+];
 
 /// Same cut as jsonl-truth embed/export.py and relic4 split.py: characters (code points), not bytes.
 pub fn chunks(text: &str, max_chars: usize, overlap: usize) -> Vec<&str> {
@@ -59,7 +61,11 @@ pub fn clip(text: &str, max: usize) -> &str {
 
 /// blake2b-128 of the chunk text, hex: the embedding cache key.
 pub fn key(t: &str) -> String {
-    blake2b_simd::Params::new().hash_length(16).hash(t.as_bytes()).to_hex().to_string()
+    blake2b_simd::Params::new()
+        .hash_length(16)
+        .hash(t.as_bytes())
+        .to_hex()
+        .to_string()
 }
 
 pub type MsgKey = [u8; 16];
@@ -86,8 +92,20 @@ pub fn msgkey(c: &Cols, i: usize) -> MsgKey {
     let s = c.s.get(i);
     if s == Some("tools") {
         let idx = c.idx.value(i).to_string();
-        let err = c.err.as_ref().and_then(|e| (!e.is_null(i)).then(|| if e.value(i) { "true" } else { "false" }));
-        md5_of(&[s, c.ts.get(i), Some(&idx), c.kind.get(i), c.call_id.get(i), c.name.get(i), c.body.get(i), err])
+        let err = c
+            .err
+            .as_ref()
+            .and_then(|e| (!e.is_null(i)).then(|| if e.value(i) { "true" } else { "false" }));
+        md5_of(&[
+            s,
+            c.ts.get(i),
+            Some(&idx),
+            c.kind.get(i),
+            c.call_id.get(i),
+            c.name.get(i),
+            c.body.get(i),
+            err,
+        ])
     } else {
         md5_of(&[s, c.role.get(i), c.ts.get(i), c.text.get(i)])
     }
@@ -100,8 +118,8 @@ pub fn months_in(source: &str) -> std::collections::BTreeMap<String, std::path::
         let n = e.file_name().to_string_lossy().to_string();
         let Some(m) = n.strip_suffix(".parquet") else { continue };
         let b = m.as_bytes();
-        let ok = m == "undated"
-            || (b.len() == 7 && b[4] == b'-' && b.iter().enumerate().all(|(i, c)| i == 4 || c.is_ascii_digit()));
+        let ok =
+            m == "undated" || (b.len() == 7 && b[4] == b'-' && b.iter().enumerate().all(|(i, c)| i == 4 || c.is_ascii_digit()));
         if ok && e.path().is_file() {
             out.insert(m.to_string(), e.path());
         }
@@ -156,7 +174,9 @@ pub struct Done {
 }
 
 fn strs(v: &serde_json::Value) -> Vec<String> {
-    v.as_array().map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()).unwrap_or_default()
+    v.as_array()
+        .map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
 }
 
 /// A month file's batches, with the columns stream `name` needs.
@@ -169,7 +189,10 @@ pub fn read_stream(cfg: &Config, name: &str, src: &Path) -> Result<Vec<Cols>, St
 /// deduped (one Pick per msgkey or (h, idx), the smallest (h, idx) kept), in output order (ts, msgkey, h, idx).
 pub fn select(cfg: &Config, name: &str, batches: &[Cols], all_roles: bool) -> Vec<Pick> {
     let st = cfg.stream(name);
-    let kinds = st["kinds"].as_array().map(|_| strs(&st["kinds"])).unwrap_or_else(|| vec!["call".into()]);
+    let kinds = st["kinds"]
+        .as_array()
+        .map(|_| strs(&st["kinds"]))
+        .unwrap_or_else(|| vec!["call".into()]);
     let roles = if all_roles { vec![] } else { strs(&st["roles"]) };
     let content = cfg.content_dedupe();
     let mut picks: HashMap<MsgKey, Pick> = HashMap::new();
@@ -198,7 +221,12 @@ pub fn select(cfg: &Config, name: &str, batches: &[Cols], all_roles: bool) -> Ve
                 p[8..].copy_from_slice(&hidx.1.to_be_bytes());
                 p
             };
-            let p = picks.entry(part).or_insert(Pick { row: (bi, i), hidx, n: 0, msgkey: mk });
+            let p = picks.entry(part).or_insert(Pick {
+                row: (bi, i),
+                hidx,
+                n: 0,
+                msgkey: mk,
+            });
             p.n += 1;
             if hidx < p.hidx {
                 p.hidx = hidx;
@@ -224,15 +252,18 @@ pub fn pieces<'a>(cfg: &Config, name: &str, body: &'a str) -> Vec<&'a str> {
     }
 }
 
-pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
-                 sess: &Sessions) -> Result<Done, String> {
+pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path, sess: &Sessions) -> Result<Done, String> {
     let t0 = Instant::now();
     let clean = crate::clean::Clean::from(cfg.stream(name));
     let batches = read_stream(cfg, name, src)?;
     let kept = select(cfg, name, &batches, false);
     let mut sb: Vec<StringBuilder> = (0..NAMES.len()).map(|_| StringBuilder::new()).collect();
-    let (mut chunk_b, mut h_b, mut nh_b, mut probe_b) = (Int64Builder::new(), Int64Builder::new(), Int64Builder::new(),
-                                                         BooleanBuilder::new());
+    let (mut chunk_b, mut h_b, mut nh_b, mut probe_b) = (
+        Int64Builder::new(),
+        Int64Builder::new(),
+        Int64Builder::new(),
+        BooleanBuilder::new(),
+    );
     let mut keys = std::collections::HashSet::new();
     let mut n = 0usize;
     let mut msgs = 0usize;
@@ -258,9 +289,25 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
         for (ci, piece) in pieces.into_iter().enumerate() {
             let k = key(piece);
             let mk = hex(&p.msgkey);
-            let vals: [Option<&str>; 17] = [Some(&k), Some(&mk), None, None, None, Some(month), sid, c.ts.get(i),
-                c.ts_th.get(i), c.engine.get(i), c.role.get(i), c.typ.get(i), c.kind.get(i), c.name.get(i),
-                Some(cat.as_deref().unwrap_or("(no session)")), None, Some(piece)];
+            let vals: [Option<&str>; 17] = [
+                Some(&k),
+                Some(&mk),
+                None,
+                None,
+                None,
+                Some(month),
+                sid,
+                c.ts.get(i),
+                c.ts_th.get(i),
+                c.engine.get(i),
+                c.role.get(i),
+                c.typ.get(i),
+                c.kind.get(i),
+                c.name.get(i),
+                Some(cat.as_deref().unwrap_or("(no session)")),
+                None,
+                Some(piece),
+            ];
             for (j, v) in vals.iter().enumerate() {
                 if !matches!(NAMES[j], "chunk" | "h" | "n_h" | "probe") {
                     sb[j].append_option(*v);
@@ -290,24 +337,43 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
     let schema = Arc::new(Schema::new(fields));
     let batch = RecordBatch::try_new(schema.clone(), cols).map_err(|e| e.to_string())?;
     write_atomic(out, schema, &batch)?;
-    let d = Done { messages: msgs, chunks: n, distinct: keys.len(), dropped: dropped.values().sum() };
+    let d = Done {
+        messages: msgs,
+        chunks: n,
+        distinct: keys.len(),
+        dropped: dropped.values().sum(),
+    };
     let mut by: std::collections::BTreeMap<&str, usize> = Default::default();
     for (k, v) in &dropped {
         *by.entry(k.class()).or_default() += v;
     }
     let why: Vec<String> = by.iter().map(|(k, v)| format!("{k} {}", num(*v))).collect();
-    eprintln!("extract {name} {month}: {} messages -> {} chunks ({} distinct texts){} · {:.1}s", num(d.messages), num(d.chunks),
-              num(d.distinct), if why.is_empty() { String::new() } else { format!(" · cleaned out {}", why.join(", ")) },
-              t0.elapsed().as_secs_f64());
+    eprintln!(
+        "extract {name} {month}: {} messages -> {} chunks ({} distinct texts){} · {:.1}s",
+        num(d.messages),
+        num(d.chunks),
+        num(d.distinct),
+        if why.is_empty() {
+            String::new()
+        } else {
+            format!(" · cleaned out {}", why.join(", "))
+        },
+        t0.elapsed().as_secs_f64()
+    );
     Ok(d)
 }
 
 fn write_atomic(out: &Path, schema: Arc<Schema>, batch: &RecordBatch) -> Result<(), String> {
-    let props = WriterProperties::builder().set_compression(Compression::ZSTD(ZstdLevel::try_new(3).unwrap())).build();
+    let props = WriterProperties::builder()
+        .set_compression(Compression::ZSTD(ZstdLevel::try_new(3).unwrap()))
+        .build();
     config::write_private(out, |f| {
         let mut w = ArrowWriter::try_new(f, schema, Some(props)).map_err(|e| e.to_string())?;
         w.write(batch).map_err(|e| e.to_string())?;
-        w.into_inner().map_err(|e| e.to_string())?.sync_all().map_err(|e| e.to_string())
+        w.into_inner()
+            .map_err(|e| e.to_string())?
+            .sync_all()
+            .map_err(|e| e.to_string())
     })
 }
 
@@ -333,7 +399,10 @@ mod tests {
         let c = chunks(&t, 6000, 400);
         assert_eq!(c.iter().map(|p| p.len()).collect::<Vec<_>>(), vec![6000, 6000, 1800]);
         let th = "ก".repeat(6001); // 3 bytes a character: the cut counts characters
-        assert_eq!(chunks(&th, 6000, 400).iter().map(|p| p.chars().count()).collect::<Vec<_>>(), vec![6000, 401]);
+        assert_eq!(
+            chunks(&th, 6000, 400).iter().map(|p| p.chars().count()).collect::<Vec<_>>(),
+            vec![6000, 401]
+        );
         assert_eq!(chunks("short", 6000, 400), vec!["short"]);
         assert_eq!(clip("ไทยไทย", 3), "ไทย");
     }
@@ -349,7 +418,14 @@ mod tests {
         // duckdb: select md5(to_json(['text','user','2026-10-01T00:00:00Z','hello']))
         let j = crate::json::duckdb_list(&[Some("text"), Some("user"), Some("2026-10-01T00:00:00Z"), Some("hello")]);
         assert_eq!(j, "[\"text\",\"user\",\"2026-10-01T00:00:00Z\",\"hello\"]");
-        assert_eq!(hex(&md5_of(&[Some("text"), Some("user"), Some("2026-10-01T00:00:00Z"), Some("hello")])),
-                   "2bcaccff2f6a357888f1a251c0863d99");
+        assert_eq!(
+            hex(&md5_of(&[
+                Some("text"),
+                Some("user"),
+                Some("2026-10-01T00:00:00Z"),
+                Some("hello")
+            ])),
+            "2bcaccff2f6a357888f1a251c0863d99"
+        );
     }
 }
