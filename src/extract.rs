@@ -124,11 +124,11 @@ pub fn sessions(source: &str, any: bool) -> Sessions {
     m
 }
 
-struct Pick {
-    row: (usize, usize), // (batch, row) of the kept copy
-    hidx: (i64, i64),
-    n: i64,
-    msgkey: String,
+pub struct Pick {
+    pub row: (usize, usize), // (batch, row) of the kept copy
+    pub hidx: (i64, i64),
+    pub n: i64,
+    pub msgkey: String,
 }
 
 pub struct Done {
@@ -138,19 +138,23 @@ pub struct Done {
     pub distinct: usize,
 }
 
-pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
-                 sess: &Sessions) -> Result<Done, String> {
-    let t0 = Instant::now();
+fn strs(v: &serde_json::Value) -> Vec<String> {
+    v.as_array().map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()).unwrap_or_default()
+}
+
+/// A month file's batches, with the columns stream `name` needs.
+pub fn read_stream(cfg: &Config, name: &str, src: &Path) -> Result<Vec<Cols>, String> {
+    let field = cfg.stream(name)["field"].as_str().unwrap_or("text");
+    read::month(src, field).map_err(|e| format!("{}: {e}", src.display()))
+}
+
+/// The messages of stream `name` in a month: filtered (field not blank, tools: kind, `roles` unless `all_roles`),
+/// deduped (one Pick per msgkey or (h, idx), the smallest (h, idx) kept), in output order (ts, msgkey, h, idx).
+pub fn select(cfg: &Config, name: &str, batches: &[Cols], all_roles: bool) -> Vec<Pick> {
     let st = cfg.stream(name);
-    let field = st["field"].as_str().unwrap_or("text");
-    let kinds: Vec<String> = st["kinds"].as_array().map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect())
-        .unwrap_or_else(|| vec!["call".into()]);
-    let roles: Vec<String> = st["roles"].as_array()
-        .map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()).unwrap_or_default();
-    let clean = crate::clean::Clean::from(st);
-    let batches = read::month(src, field).map_err(|e| format!("{}: {e}", src.display()))?;
+    let kinds = st["kinds"].as_array().map(|_| strs(&st["kinds"])).unwrap_or_else(|| vec!["call".into()]);
+    let roles = if all_roles { vec![] } else { strs(&st["roles"]) };
     let content = cfg.content_dedupe();
-    // dedupe: one Pick per partition (msgkey, or (h, idx)), the smallest (h, idx) kept
     let mut picks: HashMap<String, Pick> = HashMap::new();
     for (bi, c) in batches.iter().enumerate() {
         for i in 0..c.len {
@@ -178,14 +182,30 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
             }
         }
     }
-    let mut kept: Vec<&Pick> = picks.values().collect();
+    let mut kept: Vec<Pick> = picks.into_values().collect();
     kept.sort_by(|a, b| {
         let ta = batches[a.row.0].ts.get(a.row.1);
         let tb = batches[b.row.0].ts.get(b.row.1);
         (ta.is_none(), ta, &a.msgkey, a.hidx).cmp(&(tb.is_none(), tb, &b.msgkey, b.hidx))
     });
-    let (mc, ov) = (cfg.max_chars(), cfg.overlap());
-    let tool_max = st["max_chars"].as_u64().unwrap_or(2000) as usize;
+    kept
+}
+
+/// The pieces a message's text is cut into: text/thinking by max_chars with overlap, tools clipped at max_chars.
+pub fn pieces<'a>(cfg: &Config, name: &str, body: &'a str) -> Vec<&'a str> {
+    if name == "tools" {
+        vec![clip(body, cfg.stream(name)["max_chars"].as_u64().unwrap_or(2000) as usize)]
+    } else {
+        chunks(body, cfg.max_chars(), cfg.overlap())
+    }
+}
+
+pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
+                 sess: &Sessions) -> Result<Done, String> {
+    let t0 = Instant::now();
+    let clean = crate::clean::Clean::from(cfg.stream(name));
+    let batches = read_stream(cfg, name, src)?;
+    let kept = select(cfg, name, &batches, false);
     let mut sb: Vec<StringBuilder> = (0..NAMES.len()).map(|_| StringBuilder::new()).collect();
     let (mut chunk_b, mut h_b, mut nh_b, mut probe_b) = (Int64Builder::new(), Int64Builder::new(), Int64Builder::new(),
                                                          BooleanBuilder::new());
@@ -208,7 +228,7 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
         };
         let body: &str = &body;
         msgs += 1;
-        let pieces = if name == "tools" { vec![clip(body, tool_max)] } else { chunks(body, mc, ov) };
+        let pieces = pieces(cfg, name, body);
         let sid = c.sid.get(i);
         let (cat, probe) = sid.and_then(|s| sess.get(s)).cloned().unwrap_or((None, None));
         for (ci, piece) in pieces.into_iter().enumerate() {
@@ -246,7 +266,11 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
     let batch = RecordBatch::try_new(schema.clone(), cols).map_err(|e| e.to_string())?;
     write_atomic(out, schema, &batch)?;
     let d = Done { messages: msgs, chunks: n, distinct: keys.len(), dropped: dropped.values().sum() };
-    let why: Vec<String> = dropped.iter().map(|(k, v)| format!("{} {}", format!("{k:?}").to_lowercase(), num(*v))).collect();
+    let mut by: std::collections::BTreeMap<&str, usize> = Default::default();
+    for (k, v) in &dropped {
+        *by.entry(k.class()).or_default() += v;
+    }
+    let why: Vec<String> = by.iter().map(|(k, v)| format!("{k} {}", num(*v))).collect();
     eprintln!("extract {name} {month}: {} messages -> {} chunks ({} distinct texts){} · {:.1}s", num(d.messages), num(d.chunks),
               num(d.distinct), if why.is_empty() { String::new() } else { format!(" · cleaned out {}", why.join(", ")) },
               t0.elapsed().as_secs_f64());

@@ -5,6 +5,7 @@
 //!   relic-extract run         relic-scan months -> OUT/<stream>/YYYY-MM.parquet (only what changed)
 //!   relic-extract status      per stream: months cut, chunks, distinct texts, newest ts
 
+mod analyse;
 mod clean;
 mod config;
 mod extract;
@@ -47,6 +48,24 @@ enum Cmd {
     },
     /// Per stream: months, chunks, distinct texts, newest message
     Status,
+    /// What a run would cut and what the clean step takes out, without writing anything
+    Analyse {
+        /// only these months, comma separated: 2026-09,2026-10
+        #[arg(long)]
+        months: Option<String>,
+        /// the stream to look at
+        #[arg(long, default_value = "text")]
+        stream: String,
+        /// try a setting, repeatable: --what-if min_chars=24 --what-if chunk.max_chars=2000
+        #[arg(long = "what-if", value_name = "KEY=VALUE")]
+        what_if: Vec<String>,
+        /// samples per clean rule
+        #[arg(long, default_value_t = 1)]
+        samples: usize,
+        /// rows in the biggest / repeated / repository lists
+        #[arg(long, default_value_t = 8)]
+        top: usize,
+    },
 }
 
 fn fail(e: String) -> ! {
@@ -85,5 +104,21 @@ fn main() {
                       extract::num(chunks), extract::num(dropped));
         }
         Cmd::Status => run::status(&cfg),
+        Cmd::Analyse { months, stream, what_if, samples, top } => {
+            if !config::STREAMS.contains(&stream.as_str()) {
+                fail(format!("unknown stream {stream} (known: {})", config::STREAMS.join(", ")));
+            }
+            let alt = (!what_if.is_empty()).then(|| {
+                let mut v = cfg.v.clone();
+                let sets: Vec<String> = what_if.iter().map(|kv| {
+                    let path = config::set(&mut v, &stream, kv).unwrap_or_else(|e| fail(e));
+                    format!("{path} = {}", kv.split_once('=').map_or("", |x| x.1).trim())
+                }).collect();
+                (config::Config { v, path: cfg.path.clone(), existed: cfg.existed }, sets)
+            });
+            let months = months.map(|m| m.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect());
+            analyse::analyse(&cfg, alt.as_ref().map(|(c, s)| (c, s.clone())), months, &stream, samples, top)
+                .unwrap_or_else(|e| fail(e));
+        }
     }
 }
