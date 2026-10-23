@@ -46,7 +46,8 @@ drop_tags = ["task-notification", "subagent_notification", "goal_context", "hook
              "environment_context", "user_instructions"]   # a message starting with <tag is dropped
 drop_prefixes = ["Stop hook feedback:", "Base directory for this skill:", "[Request interrupted by user",
                  "Caveat: The messages below were generated", "# AGENTS.md instructions", "API Error:",
-                 "No response requested."]
+                 "No response requested.", "[Image: original ", "Tool loaded.",
+                 "[Workflow harness — user request]"]   # the last: a copy of the human's request, kept in the main session
 drop_invisible = true           # nothing but whitespace / zero-width characters
 min_chars = 0                   # v3 used 24; 0 = keep short messages
 redact = true                   # WireGuard keys, Telegram / Discord tokens, Discord webhooks -> [kind:abcd…N]
@@ -75,7 +76,8 @@ fn clean_defaults() -> Value {
                       "environment_context", "user_instructions"],
         "drop_prefixes": ["Stop hook feedback:", "Base directory for this skill:", "[Request interrupted by user",
                           "Caveat: The messages below were generated", "# AGENTS.md instructions", "API Error:",
-                          "No response requested."],
+                          "No response requested.", "[Image: original ", "Tool loaded.",
+                          "[Workflow harness — user request]"],
         "drop_invisible": true,
         "min_chars": 0,
         "redact": true,
