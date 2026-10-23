@@ -14,8 +14,10 @@ It reads the month files [relic-scan](https://github.com/Soul-Brews-Studio/relic
 
 ## Use
 
+One binary, `relic-extract` (Rust, `src/*.rs`). No Python or DuckDB needed on the machine.
+
 ```sh
-uv tool install --editable .        # or: uv run relic-extract …
+just install                        # build, then put relic-extract in ~/.local/bin
 relic-extract init                  # write ~/.arra/relic.toml with the defaults (kept if it exists)
 relic-extract run                   # only months whose source changed, and streams whose settings changed
 relic-extract run --months 2026-10 --stream text --force
@@ -24,6 +26,10 @@ relic-extract config                # the settings in effect (the file merged ov
 ```
 
 `--config FILE` or `ARRA_CONFIG` points to another config.
+
+The Python version (`src/relic_extract`, `uv run relic-extract …`) is kept as the reference: `just parity` cuts every
+month with the binary into `~/.relic-extract-parity` and compares it with `~/.relic-extract` row by row, every column,
+and the row order. Both write the same `_extract.json` hash, so either can continue after the other.
 
 ## ~/.arra/relic.toml
 
@@ -73,3 +79,9 @@ max_chars = 2000                # a tool body is cut here, not chunked
 `<stream>/_extract.json` records the settings a stream was cut with. Change them and every month of that stream is cut again.
 
 The cut and the keys are the same as agent-relic-v4's `split` (recipe `text-v1`) and jsonl-truth's `embed/export.py`. A chunk's `key` therefore finds a vector either of them already made.
+
+## Docs
+
+- `docs/SCAN-INPUT.md`: relic-scan's output, read from its source and checked against the data (10 rounds).
+- `docs/LITERATURE.md`: what earlier relic generations (v1-v4, relic-lessons, relic4-scan) decided and measured about
+  extraction, keys, chunking, storage, FTS/ICU and LanceDB.
