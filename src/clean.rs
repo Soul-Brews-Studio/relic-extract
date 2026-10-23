@@ -29,10 +29,34 @@ pub enum Commands {
 pub enum Drop {
     Empty,
     Invisible,
-    Tag,
-    Prefix,
+    Tag(usize),    // index in drop_tags
+    Prefix(usize), // index in drop_prefixes
     Command,
     Short,
+    Stripped, // nothing left once strip_tags ran
+}
+
+impl Drop {
+    /// The log's word for it: "tag", "prefix", …
+    pub fn class(&self) -> &'static str {
+        match self {
+            Drop::Empty => "empty",
+            Drop::Invisible => "invisible",
+            Drop::Tag(_) => "tag",
+            Drop::Prefix(_) => "prefix",
+            Drop::Command => "command",
+            Drop::Short => "short",
+            Drop::Stripped => "stripped",
+        }
+    }
+}
+
+/// What the clean step did to a message it kept (for `analyse`).
+#[derive(Default, Debug)]
+pub struct Trace {
+    pub stripped_chars: usize, // characters removed by strip_tags
+    pub command: bool,         // a slash-command wrapper rewritten to "/x args"
+    pub redacted: Vec<&'static str>,
 }
 
 pub struct Clean {
@@ -73,7 +97,12 @@ fn rules() -> &'static Vec<Rule> {
 }
 
 /// The extra redaction: each secret becomes [kind:first4…len].
+#[cfg(test)]
 pub fn redact(s: &str) -> Cow<'_, str> {
+    redact_traced(s, &mut vec![])
+}
+
+fn redact_traced<'a>(s: &'a str, kinds: &mut Vec<&'static str>) -> Cow<'a, str> {
     let mut cur: Cow<str> = Cow::Borrowed(s);
     for rule in rules() {
         if !rule.rx.is_match(&cur) {
@@ -87,6 +116,7 @@ pub fn redact(s: &str) -> Cow<'_, str> {
             let v = m.as_str();
             let head: String = v.chars().take(4).collect();
             out.push_str(&format!("[{}:{}…{}]", rule.kind, head, v.chars().count()));
+            kinds.push(rule.kind);
             last = m.end();
         }
         out.push_str(&cur[last..]);
@@ -124,12 +154,31 @@ impl Clean {
         })
     }
 
+    /// A label for a drop: "tag <task-notification>", "prefix \"Stop hook feedback:\"", "invisible", …
+    pub fn label(&self, d: &Drop) -> String {
+        match d {
+            Drop::Tag(i) => format!("tag <{}>", self.drop_tags[*i]),
+            Drop::Prefix(i) => format!("prefix {:?}", self.drop_prefixes[*i]),
+            Drop::Command => "command without args".into(),
+            Drop::Short => format!("shorter than {} chars", self.min_chars),
+            Drop::Stripped => "only stripped tags".into(),
+            other => other.class().into(),
+        }
+    }
+
     /// The text to cut, or why the message is dropped.
     pub fn apply<'a>(&self, raw: &'a str) -> Result<Cow<'a, str>, Drop> {
+        self.apply_traced(raw, &mut Trace::default())
+    }
+
+    /// `apply`, also saying what it stripped, rewrote and redacted.
+    pub fn apply_traced<'a>(&self, raw: &'a str, tr: &mut Trace) -> Result<Cow<'a, str>, Drop> {
         let mut s: Cow<str> = Cow::Borrowed(raw);
         for rx in &self.strip {
             if rx.is_match(&s) {
+                let before = s.chars().count();
                 s = Cow::Owned(rx.replace_all(&s, "").into_owned());
+                tr.stripped_chars += before - s.chars().count();
             }
         }
         let head = s.trim_start_matches(invisible);
@@ -144,28 +193,38 @@ impl Clean {
                         return Err(Drop::Command);
                     }
                     s = Cow::Owned(format!("{name} {args}").trim().to_string());
+                    tr.command = true;
                 }
             }
         }
         let t = s.trim_matches(invisible);
         if t.is_empty() {
-            return Err(if raw.trim().is_empty() { Drop::Empty } else if self.drop_invisible { Drop::Invisible } else { Drop::Empty });
+            return Err(if raw.trim().is_empty() {
+                Drop::Empty
+            } else if tr.stripped_chars > 0 && raw.len() != s.len() && !raw.trim_matches(invisible).is_empty()
+                && s.trim_matches(invisible).is_empty() && matches!(s, Cow::Owned(_)) {
+                Drop::Stripped
+            } else if self.drop_invisible {
+                Drop::Invisible
+            } else {
+                return Ok(s); // drop_invisible = false: a zero-width-only reply is kept as it is
+            });
         }
-        if self.drop_tags.iter().any(|g| {
+        if let Some(i) = self.drop_tags.iter().position(|g| {
             t.strip_prefix('<').and_then(|r| r.strip_prefix(g.as_str()))
                 .is_some_and(|r| r.starts_with('>') || r.starts_with(char::is_whitespace))
         }) {
-            return Err(Drop::Tag);
+            return Err(Drop::Tag(i));
         }
-        if self.drop_prefixes.iter().any(|p| t.starts_with(p.as_str())) {
-            return Err(Drop::Prefix);
+        if let Some(i) = self.drop_prefixes.iter().position(|p| t.starts_with(p.as_str())) {
+            return Err(Drop::Prefix(i));
         }
         if self.min_chars > 0 && t.chars().count() < self.min_chars {
             return Err(Drop::Short);
         }
         let t = if t.len() == s.len() { s } else { Cow::Owned(t.to_string()) };
         Ok(if self.redact {
-            match redact(&t) {
+            match redact_traced(&t, &mut tr.redacted) {
                 Cow::Borrowed(_) => t,
                 Cow::Owned(o) => Cow::Owned(o),
             }
@@ -190,7 +249,7 @@ mod tests {
     fn strips_reminders_and_keeps_the_human() {
         let t = "<system-reminder>\nrules\n</system-reminder>\nfix the bug please";
         assert_eq!(c().apply(t).unwrap(), "fix the bug please");
-        assert_eq!(c().apply("<system-reminder>only</system-reminder>"), Err(Drop::Invisible));
+        assert_eq!(c().apply("<system-reminder>only</system-reminder>"), Err(Drop::Stripped));
         assert_eq!(c().apply("hi <system-reminder>never closed"), Ok(Cow::Borrowed("hi")));
     }
 
@@ -204,13 +263,17 @@ mod tests {
 
     #[test]
     fn drops_harness_turns() {
-        assert_eq!(c().apply("<task-notification>\n<task-id>x</task-id>"), Err(Drop::Tag));
-        assert_eq!(c().apply("<local-command-stdout>Goal set</local-command-stdout>"), Err(Drop::Tag));
+        assert_eq!(c().apply("<task-notification>\n<task-id>x</task-id>"), Err(Drop::Tag(0)));
+        assert_eq!(c().apply("<local-command-stdout>Goal set</local-command-stdout>"), Err(Drop::Tag(1)));
         assert_eq!(c().apply("<task-notifications-are-not-this>"), Ok(Cow::Borrowed("<task-notifications-are-not-this>")));
-        assert_eq!(c().apply("Stop hook feedback: [x]"), Err(Drop::Prefix));
+        assert_eq!(c().apply("Stop hook feedback: [x]"), Err(Drop::Prefix(0)));
+        assert_eq!(c().label(&Drop::Tag(0)), "tag <task-notification>");
         assert_eq!(c().apply("\u{200E}"), Err(Drop::Invisible));
         assert_eq!(c().apply("\u{200B} \n"), Err(Drop::Invisible));
         assert_eq!(c().apply("ทำต่อ"), Ok(Cow::Borrowed("ทำต่อ")));
+        let mut keep = c();
+        keep.drop_invisible = false;
+        assert_eq!(keep.apply("\u{200E}").unwrap(), "\u{200E}");
     }
 
     #[test]

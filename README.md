@@ -23,7 +23,16 @@ relic-extract run                   # only months whose source changed, and stre
 relic-extract run --months 2026-10 --stream text --force
 relic-extract status                # per stream: months, chunks, distinct texts, newest message
 relic-extract config                # the settings in effect (the file merged over the defaults)
+relic-extract analyse               # what a run would cut and what the clean step takes out; writes nothing
+relic-extract analyse --months 2026-10 --what-if min_chars=24 --what-if chunk.max_chars=2000
 ```
+
+`analyse` runs the same select / clean / cut as `run`, in memory, and prints: totals (raw cut -> other roles ->
+cleaned out -> kept, chunks, distinct texts), a table by month, each clean rule with its messages, characters and a
+sample, what strip_tags / commands / redact did to the messages that stay, chunks per message and the biggest
+messages, the most repeated texts (loops show up here), and chunks per repository. `--what-if KEY=VALUE`
+(repeatable) adds a second column with the setting changed; a short key is looked up in `streams.<stream>.clean`,
+then `streams.<stream>`, then `chunk`, then `[extract]`. Nothing is written.
 
 `--config FILE` or `ARRA_CONFIG` points to another config.
 
@@ -40,6 +49,7 @@ One file for the whole chain, with nested tables per tool. relic-extract reads `
 source = "~/.relic-scan"        # relic-scan's output
 out = "~/.relic-extract"        # <stream>/YYYY-MM.parquet
 months = "changed"              # "changed" | "all" | ["2026-10", "2026-09"]
+sessions = "any"                # cat/probe from meta/sessions.parquet: "any" tier (main preferred) | "main" only
 
 [extract.dedupe]
 key = "content"                 # "content": a message rewritten with other bytes is embedded once · "h": every row
@@ -51,10 +61,22 @@ overlap = 400
 [extract.streams.text]
 enabled = true
 field = "text"
+roles = ["user", "assistant"]   # [] = every role
+
+[extract.streams.text.clean]     # before cutting; msgkey stays on the raw row, key is on the cleaned chunk
+enabled = true
+strip_tags = ["system-reminder"]                 # <tag>…</tag> removed anywhere
+commands = "args"               # slash commands: "args" -> "/goal <args>" (none: dropped) | "drop" | "keep"
+drop_tags = ["task-notification", "subagent_notification", "goal_context", "hook_prompt", "local-command-stdout", …]
+drop_prefixes = ["Stop hook feedback:", "Base directory for this skill:", "[Request interrupted by user", …]
+drop_invisible = true           # nothing but whitespace / zero-width characters
+min_chars = 0                   # v3 used 24; 0 = keep short messages
+redact = true                   # WireGuard keys, Telegram / Discord tokens, Discord webhooks -> [kind:abcd…N]
 
 [extract.streams.thinking]
 enabled = false                 # Nat 2026-10-22: "just text no thinking for the embed"
 field = "text"
+roles = ["thinking"]
 
 [extract.streams.tools]
 enabled = false                 # Nat 2026-10-22: "next time we skip tools"
