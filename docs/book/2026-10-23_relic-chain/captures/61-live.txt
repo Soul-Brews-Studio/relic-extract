@@ -1,0 +1,10 @@
+$ curl -sI https://relic.buildwithoracle.com/report/
+HTTP/2 200 
+date: Fri, 23 Oct 2026 14:42:20 GMT
+content-type: text/html
+cf-cache-status: MISS
+cache-control: public, max-age=0, must-revalidate
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=d4NUA9MwKsxR3OImaey39WOuQFYW9X1u9k%2BThFU82N6rT54ebYNF0EouorNLche0DdxGEtzl7OGwWIpWZbcQ6JRM%2B3exmweFS0jTrz61w208s%2F4%2FhpU0eOcxN4959QBwmlHmVsRHi%2BadXQsF"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+(exit 0 · 0.7 s)

@@ -25,5 +25,10 @@
  "relic:hitting · single-file · superuser": "jsonl-oracle dashboard (Go + PocketBase)",
  "maw:backend-only · just-finished · nat-decisions": "Babysitting codex on the maw-js board",
  "relic:forged · frame-like · indents": "Workflow tasks (writing, review)",
- "relic:dev-mcp-token · single-file · superuser": "jsonl-oracle dashboard (Go + PocketBase)"
+ "relic:dev-mcp-token · single-file · superuser": "jsonl-oracle dashboard (Go + PocketBase)",
+ "relic:below · rules · session": "Workflow tasks (writing, review)",
+ "relic:image · merge · nudge": "Show me, deploy, merge",
+ "relic:dev-mcp-token · hitting · single-file": "jsonl-oracle dashboard (Go + PocketBase)",
+ "relic:pane · w11 · w4r": "Pasted index runs and session hand-offs",
+ "relic:brief.md · outline.md · verify.py": "Writing the relic lessons book"
 }

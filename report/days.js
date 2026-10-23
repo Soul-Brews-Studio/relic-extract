@@ -39,7 +39,8 @@ function daySection() {
   if (!DATA.days) return;
   const all = DATA.days.days, max = Math.max(...all.map((d) => d.prompts_main || 0)), busiest = [...all].sort((a, b) => (b.prompts_main || 0) - (a.prompts_main || 0))[0];
   section(t("day.h"), t("day.lead", { n: all.length, d0: all[0].day, d1: all[all.length - 1].day, b: busiest.day, bn: fmtN(busiest.prompts_main),
-    s: all.filter((d) => d.summary).length, m: DATA.days.model, host: DATA.days.host }), (s) => {
+    sum: (() => { const n = all.filter((d) => d.summary).length;
+      return n ? t("day.sum.yes", { s: n, m: DATA.days.model, host: DATA.days.host }) : t("day.sum.no", { m: DATA.days.model, host: DATA.days.host }); })() }), (s) => {
     const start = new Date(all[0].day + "T12:00:00"), end = new Date(all[all.length - 1].day + "T12:00:00");
     start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
     const weeks = Math.ceil(((end - start) / 864e5 + 1) / 7);

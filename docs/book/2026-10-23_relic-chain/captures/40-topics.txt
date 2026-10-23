@@ -1,0 +1,18 @@
+$ just topics
+topics: 140,162 distinct prompt texts · 140,162 with a vector (100.00%) · dim 768 · from /Users/beta/relic4-fresh/vec/_cache/unsloth--embeddinggemma-300m@806f5f90
+topics: k-means k=36 in 11s · mean cosine to centroid 0.688
+topics: 8/36 named from topic-names.json
+topics: 36 topics · 28s -> /Users/beta/.relic-extract/report/topics.json
+   15,170  controll · catlab.local · trip · kvm · learn · app
+   14,386  larislab · ultrathink · group · answer · peek · nat
+   11,148  remove · fix · nope · dont · back · continue
+    9,342  claims · refute · below · computed · instructions · column
+    9,330  image · warmup · active · always · cool · sonnet
+    9,312  nat · ผม · ขอบคุณ · oracle · เจอ · ตัว
+    7,952  attachment · สไลด์ · ทำ · ห้อง · บทพูด · everyone
+    7,100  repo · repos · return · git · grep · paths
+    6,858  clippy · alpha · tests · maw-rs · all-targets · cargo
+    6,602  oracle · welcome · bigquery · jera-ssot-cloud · consultation · philosophy
+    6,486  ทำ · แล้วก็ · อ่ะ · ดู · ตอนนี้ · ป่ะ
+    6,104  maw · mawjs · hey · mawjs-oracle · peers · federation
+(exit 0 · 29.2 s)
