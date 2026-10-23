@@ -43,16 +43,19 @@ strip_tags = ["system-reminder"]                 # <tag>…</tag> removed anywhe
 commands = "args"               # slash commands: "args" -> "/goal <args>" (none: dropped) | "drop" | "keep"
 drop_tags = ["task-notification", "subagent_notification", "goal_context", "hook_prompt", "local-command-stdout",
              "local-command-stderr", "local-command-caveat", "bash-input", "bash-stdout", "bash-stderr",
-             "environment_context", "user_instructions"]   # a message starting with <tag is dropped
+             "environment_context", "user_instructions", "teammate-message"]   # a message starting with <tag is dropped
 drop_prefixes = ["Stop hook feedback:", "Base directory for this skill:", "[Request interrupted by user",
                  "Caveat: The messages below were generated", "# AGENTS.md instructions", "API Error:",
                  "No response requested.", "[Image: original ", "Tool loaded.",
                  "[Workflow harness — user request]",   # a copy of the human's request, kept in the main session
                  "# /loop — schedule a recurring",        # the /loop skill body, sent on every tick
-                 "Warning: The maximum number of unified exec processes"]   # codex harness warning
+                 "Warning: The maximum number of unified exec processes",   # codex harness warning
+                 "This session is being continued from a previous conversation",   # a compaction summary
+                 "A session-scoped Stop hook is now active", "(Re-invocation of /",   # /goal and skill notices
+                 "[Image: source: ", "Another Claude session sent a message:"]   # an attached image's path, a team relay
 drop_texts = ["(holding)", "Holding, unchanged.", "Unchanged. Re-arming.", "No change since last check.", "Idle.",
               "(silent — home)", "⏳", "_(quiet — codex parked, board unchanged)_ 🌱", "Prompt is too long",
-              "health-check-ping"]   # the whole message, after trimming: loop status chatter, an API echo, a probe
+              "health-check-ping", "Continue from where you left off."]   # the whole message, after trimming: loop status chatter, an API echo, a probe
 drop_invisible = true           # nothing but whitespace / zero-width characters
 min_chars = 0                   # v3 used 24; 0 = keep short messages
 drop_over_chars = 1000000       # a pasted dump (a 5.2 M-char crash report); 0 = keep every length
@@ -79,15 +82,18 @@ fn clean_defaults() -> Value {
         "commands": "args",
         "drop_tags": ["task-notification", "subagent_notification", "goal_context", "hook_prompt", "local-command-stdout",
                       "local-command-stderr", "local-command-caveat", "bash-input", "bash-stdout", "bash-stderr",
-                      "environment_context", "user_instructions"],
+                      "environment_context", "user_instructions", "teammate-message"],
         "drop_prefixes": ["Stop hook feedback:", "Base directory for this skill:", "[Request interrupted by user",
                           "Caveat: The messages below were generated", "# AGENTS.md instructions", "API Error:",
                           "No response requested.", "[Image: original ", "Tool loaded.",
                           "[Workflow harness — user request]", "# /loop — schedule a recurring",
-                          "Warning: The maximum number of unified exec processes"],
+                          "Warning: The maximum number of unified exec processes",
+                          "This session is being continued from a previous conversation",
+                          "A session-scoped Stop hook is now active", "(Re-invocation of /",
+                          "[Image: source: ", "Another Claude session sent a message:"],
         "drop_texts": ["(holding)", "Holding, unchanged.", "Unchanged. Re-arming.", "No change since last check.", "Idle.",
                        "(silent — home)", "⏳", "_(quiet — codex parked, board unchanged)_ 🌱", "Prompt is too long",
-                       "health-check-ping"],
+                       "health-check-ping", "Continue from where you left off."],
         "drop_invisible": true,
         "min_chars": 0,
         "drop_over_chars": 1000000,

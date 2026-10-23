@@ -1,0 +1,9 @@
+// The share view of the month-by-month report, as a static-assets Worker at relic.buildwithoracle.com/report.
+// Build and deploy with: just publish (builds --share, copies it to ./public/report, runs wrangler deploy).
+{
+  "name": "relic-report",
+  "compatibility_date": "2026-10-01",
+  "account_id": "a5eabdc2b11aae9bd5af46bd6a88179e",
+  "assets": { "directory": "./public", "html_handling": "auto-trailing-slash" },
+  "routes": [{ "pattern": "relic.buildwithoracle.com/report*", "zone_name": "buildwithoracle.com" }]
+}
