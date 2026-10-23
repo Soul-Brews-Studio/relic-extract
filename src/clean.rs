@@ -1,5 +1,6 @@
 //! The clean step: what a message's text becomes before it is cut, for a stream with `[extract.streams.<s>.clean]`.
 //!
+//! ```text
 //!   1. strip_tags      remove <tag>…</tag> blocks anywhere (an unclosed one runs to the end)
 //!   2. commands        a slash-command wrapper (<command-name>/x … <command-args>a</command-args>):
 //!                      "args" -> "/x a" (dropped when there are no args) · "drop" · "keep" as it is
@@ -8,6 +9,7 @@
 //!                      starts with one of drop_prefixes · fewer than min_chars characters
 //!   5. redact          secrets relic-scan's 10 rules miss: WireGuard keys, Telegram bot tokens, Discord webhooks
 //!                      and bot tokens, written as [kind:abcd…N] like relic-scan does
+//! ```
 //!
 //! msgkey stays on the raw row (relic4 finds the message by it); key is the blake2b of the cleaned chunk.
 //! Measured on m5 (docs/SCAN-INPUT.md): about 18 % of text chunks are harness text.

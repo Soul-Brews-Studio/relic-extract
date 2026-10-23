@@ -5,15 +5,8 @@
 //!   relic-extract run         relic-scan months -> OUT/<stream>/YYYY-MM.parquet (only what changed)
 //!   relic-extract status      per stream: months cut, chunks, distinct texts, newest ts
 
-mod analyse;
-mod clean;
-mod config;
-mod extract;
-mod json;
-mod read;
-mod run;
-
 use clap::{Parser, Subcommand};
+use relic_extract::{analyse, config, extract, run};
 
 #[derive(Parser)]
 #[command(version, about = "relic-scan month files -> per-stream, deduped, chunked parts for embedding")]

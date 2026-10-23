@@ -32,6 +32,9 @@ pub const NAMES: [&str; 17] = ["key", "msgkey", "chunk", "h", "n_h", "month", "s
 
 /// Same cut as jsonl-truth embed/export.py and relic4 split.py: characters (code points), not bytes.
 pub fn chunks(text: &str, max_chars: usize, overlap: usize) -> Vec<&str> {
+    if text.len() <= max_chars {
+        return vec![text]; // characters <= bytes: 97 % of messages stop here
+    }
     let starts: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
     let n = starts.len();
     if n <= max_chars {
@@ -59,21 +62,34 @@ pub fn key(t: &str) -> String {
     blake2b_simd::Params::new().hash_length(16).hash(t.as_bytes()).to_hex().to_string()
 }
 
-fn md5_hex(s: &str) -> String {
-    let d = Md5::digest(s.as_bytes());
-    d.iter().map(|b| format!("{b:02x}")).collect()
+pub type MsgKey = [u8; 16];
+
+pub fn hex(b: &[u8]) -> String {
+    const H: &[u8; 16] = b"0123456789abcdef";
+    let mut s = String::with_capacity(b.len() * 2);
+    for x in b {
+        s.push(H[(x >> 4) as usize] as char);
+        s.push(H[(x & 15) as usize] as char);
+    }
+    s
+}
+
+fn md5_of(items: &[Option<&str>]) -> MsgKey {
+    let mut h = Md5::new();
+    crate::json::duckdb_list_feed(items, &mut |b| h.update(b));
+    h.finalize().into()
 }
 
 /// agent-relic-v4 src/relic4/sql.py MSGKEY — keep byte-identical: relic4 and relic-embed key on it.
-pub fn msgkey(c: &Cols, i: usize) -> String {
+/// md5(to_json([...])) as raw bytes; `hex` gives the column's text.
+pub fn msgkey(c: &Cols, i: usize) -> MsgKey {
     let s = c.s.get(i);
     if s == Some("tools") {
         let idx = c.idx.value(i).to_string();
         let err = c.err.as_ref().and_then(|e| (!e.is_null(i)).then(|| if e.value(i) { "true" } else { "false" }));
-        md5_hex(&crate::json::duckdb_list(&[s, c.ts.get(i), Some(&idx), c.kind.get(i), c.call_id.get(i), c.name.get(i),
-                                            c.body.get(i), err]))
+        md5_of(&[s, c.ts.get(i), Some(&idx), c.kind.get(i), c.call_id.get(i), c.name.get(i), c.body.get(i), err])
     } else {
-        md5_hex(&crate::json::duckdb_list(&[s, c.role.get(i), c.ts.get(i), c.text.get(i)]))
+        md5_of(&[s, c.role.get(i), c.ts.get(i), c.text.get(i)])
     }
 }
 
@@ -97,13 +113,14 @@ pub type Sessions = HashMap<String, (Option<String>, Option<bool>)>;
 
 /// sid -> (cat, probe) from meta/sessions.parquet (any_value(cat) = the first non-null, bool_or(probe)), main tier
 /// first; with `any`, a sid with no main row takes its other-tier rows (omp sub-sessions, a resumed session's file).
-pub fn sessions(source: &str, any: bool) -> Sessions {
+pub fn sessions(source: &str, any: bool) -> Result<Sessions, String> {
     let (mut m, mut other): (Sessions, Sessions) = Default::default();
     let p = Path::new(source).join("meta").join("sessions.parquet");
     if !p.exists() {
-        return m;
+        eprintln!("extract: no {} — every chunk gets cat '(no session)'", p.display());
+        return Ok(m);
     }
-    for (sid, tier, cat, probe) in read::sessions(&p) {
+    for (sid, tier, cat, probe) in read::sessions(&p)? {
         let main = tier.as_deref() == Some("main");
         if !main && !any {
             continue;
@@ -121,14 +138,14 @@ pub fn sessions(source: &str, any: bool) -> Sessions {
     for (sid, v) in other {
         m.entry(sid).or_insert(v);
     }
-    m
+    Ok(m)
 }
 
 pub struct Pick {
     pub row: (usize, usize), // (batch, row) of the kept copy
     pub hidx: (i64, i64),
     pub n: i64,
-    pub msgkey: String,
+    pub msgkey: MsgKey,
 }
 
 pub struct Done {
@@ -145,7 +162,7 @@ fn strs(v: &serde_json::Value) -> Vec<String> {
 /// A month file's batches, with the columns stream `name` needs.
 pub fn read_stream(cfg: &Config, name: &str, src: &Path) -> Result<Vec<Cols>, String> {
     let field = cfg.stream(name)["field"].as_str().unwrap_or("text");
-    read::month(src, field).map_err(|e| format!("{}: {e}", src.display()))
+    read::month(src, name, field).map_err(|e| format!("{}: {e}", src.display()))
 }
 
 /// The messages of stream `name` in a month: filtered (field not blank, tools: kind, `roles` unless `all_roles`),
@@ -155,7 +172,7 @@ pub fn select(cfg: &Config, name: &str, batches: &[Cols], all_roles: bool) -> Ve
     let kinds = st["kinds"].as_array().map(|_| strs(&st["kinds"])).unwrap_or_else(|| vec!["call".into()]);
     let roles = if all_roles { vec![] } else { strs(&st["roles"]) };
     let content = cfg.content_dedupe();
-    let mut picks: HashMap<String, Pick> = HashMap::new();
+    let mut picks: HashMap<MsgKey, Pick> = HashMap::new();
     for (bi, c) in batches.iter().enumerate() {
         for i in 0..c.len {
             if c.s.get(i) != Some(name) {
@@ -173,7 +190,14 @@ pub fn select(cfg: &Config, name: &str, batches: &[Cols], all_roles: bool) -> Ve
             }
             let mk = msgkey(c, i);
             let hidx = (c.h.value(i), c.idx.value(i));
-            let part = if content { mk.clone() } else { format!("{}:{}", hidx.0, hidx.1) };
+            let part = if content {
+                mk
+            } else {
+                let mut p = [0u8; 16];
+                p[..8].copy_from_slice(&hidx.0.to_be_bytes());
+                p[8..].copy_from_slice(&hidx.1.to_be_bytes());
+                p
+            };
             let p = picks.entry(part).or_insert(Pick { row: (bi, i), hidx, n: 0, msgkey: mk });
             p.n += 1;
             if hidx < p.hidx {
@@ -233,7 +257,8 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
         let (cat, probe) = sid.and_then(|s| sess.get(s)).cloned().unwrap_or((None, None));
         for (ci, piece) in pieces.into_iter().enumerate() {
             let k = key(piece);
-            let vals: [Option<&str>; 17] = [Some(&k), Some(&p.msgkey), None, None, None, Some(month), sid, c.ts.get(i),
+            let mk = hex(&p.msgkey);
+            let vals: [Option<&str>; 17] = [Some(&k), Some(&mk), None, None, None, Some(month), sid, c.ts.get(i),
                 c.ts_th.get(i), c.engine.get(i), c.role.get(i), c.typ.get(i), c.kind.get(i), c.name.get(i),
                 Some(cat.as_deref().unwrap_or("(no session)")), None, Some(piece)];
             for (j, v) in vals.iter().enumerate() {
@@ -278,24 +303,19 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
 }
 
 fn write_atomic(out: &Path, schema: Arc<Schema>, batch: &RecordBatch) -> Result<(), String> {
-    if let Some(d) = out.parent() {
-        config::private_dir(d).map_err(|e| e.to_string())?;
-    }
-    let tmp = out.with_extension("parquet.part");
     let props = WriterProperties::builder().set_compression(Compression::ZSTD(ZstdLevel::try_new(3).unwrap())).build();
-    let f = fs::File::create(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    let mut w = ArrowWriter::try_new(f, schema, Some(props)).map_err(|e| e.to_string())?;
-    w.write(batch).map_err(|e| e.to_string())?;
-    w.into_inner().map_err(|e| e.to_string())?.sync_all().map_err(|e| e.to_string())?;
-    fs::rename(&tmp, out).map_err(|e| e.to_string())?;
-    config::private_file(out).map_err(|e| e.to_string())
+    config::write_private(out, |f| {
+        let mut w = ArrowWriter::try_new(f, schema, Some(props)).map_err(|e| e.to_string())?;
+        w.write(batch).map_err(|e| e.to_string())?;
+        w.into_inner().map_err(|e| e.to_string())?.sync_all().map_err(|e| e.to_string())
+    })
 }
 
 pub fn num(n: usize) -> String {
     let s = n.to_string();
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);
@@ -328,6 +348,8 @@ mod tests {
     fn md5_of_duckdb_json() {
         // duckdb: select md5(to_json(['text','user','2026-10-01T00:00:00Z','hello']))
         let j = crate::json::duckdb_list(&[Some("text"), Some("user"), Some("2026-10-01T00:00:00Z"), Some("hello")]);
-        assert_eq!(md5_hex(&j), "2bcaccff2f6a357888f1a251c0863d99");
+        assert_eq!(j, "[\"text\",\"user\",\"2026-10-01T00:00:00Z\",\"hello\"]");
+        assert_eq!(hex(&md5_of(&[Some("text"), Some("user"), Some("2026-10-01T00:00:00Z"), Some("hello")])),
+                   "2bcaccff2f6a357888f1a251c0863d99");
     }
 }

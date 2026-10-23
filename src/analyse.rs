@@ -18,13 +18,16 @@ use crate::clean::{Clean, Trace};
 use crate::config::Config;
 use crate::extract::{self, num};
 
+/// What one clean rule took out: (messages, characters, samples).
+type Dropped = (usize, usize, Vec<String>);
+
 #[derive(Default)]
 struct Side {
     raw_msgs: usize,
     raw_chunks: usize,
     raw_chars: usize,
     other_roles: BTreeMap<String, usize>,
-    drops: BTreeMap<String, (usize, usize, Vec<String>)>, // label -> (messages, chars, samples)
+    drops: BTreeMap<String, Dropped>,
     kept: usize,
     chunks: usize,
     chars: usize,
@@ -37,6 +40,49 @@ struct Side {
     no_session: usize,
     cats: HashMap<String, usize>,
     months: BTreeMap<String, [usize; 5]>, // raw, kept, chunks, distinct, cleaned out
+}
+
+impl Side {
+    /// Add one month's numbers (months merged in order, so samples come from the earliest months, as in one pass).
+    fn merge(&mut self, o: Side, samples: usize) {
+        self.raw_msgs += o.raw_msgs;
+        self.raw_chunks += o.raw_chunks;
+        self.raw_chars += o.raw_chars;
+        for (k, v) in o.other_roles {
+            *self.other_roles.entry(k).or_default() += v;
+        }
+        for (k, (n, ch, sm)) in o.drops {
+            let e = self.drops.entry(k).or_default();
+            e.0 += n;
+            e.1 += ch;
+            for x in sm {
+                if e.2.len() < samples {
+                    e.2.push(x);
+                }
+            }
+        }
+        self.kept += o.kept;
+        self.chunks += o.chunks;
+        self.chars += o.chars;
+        for (k, (n, h)) in o.distinct {
+            self.distinct.entry(k).or_insert((0, h)).0 += n;
+        }
+        self.stripped.0 += o.stripped.0;
+        self.stripped.1 += o.stripped.1;
+        self.commands += o.commands;
+        for (k, v) in o.redacted {
+            *self.redacted.entry(k).or_default() += v;
+        }
+        for (a, b) in self.hist.iter_mut().zip(o.hist) {
+            *a += b;
+        }
+        self.biggest.extend(o.biggest);
+        self.no_session += o.no_session;
+        for (k, v) in o.cats {
+            *self.cats.entry(k).or_default() += v;
+        }
+        self.months.extend(o.months);
+    }
 }
 
 /// One line, at most `n` characters, for a sample.
@@ -155,26 +201,36 @@ pub fn analyse(base: &Config, alt: Option<(&Config, Vec<String>)>, months: Optio
     }
     let t0 = std::time::Instant::now();
     let tty = std::io::IsTerminal::is_terminal(&std::io::stderr());
-    let sess_a = extract::sessions(base.source(), base.v["sessions"] != "main");
-    let sess_b = alt.as_ref().map(|(c, _)| extract::sessions(c.source(), c.v["sessions"] != "main"));
-    let (mut a, mut b) = (Side::default(), Side::default());
-    let mut n_months = 0;
-    for (m, f) in &src {
-        if months.as_ref().is_some_and(|w| !w.contains(m)) {
-            continue;
-        }
+    let sess_a = extract::sessions(base.source(), base.v["sessions"] != "main")?;
+    let sess_b = match &alt {
+        Some((c, _)) => Some(extract::sessions(c.source(), c.v["sessions"] != "main")?),
+        None => None,
+    };
+    let todo: Vec<(&String, &std::path::PathBuf)> = src.iter().filter(|(m, _)| months.as_ref().is_none_or(|w| w.contains(*m)))
+        .collect();
+    let n_months = todo.len();
+    let done = std::sync::atomic::AtomicUsize::new(0);
+    let per = crate::run::par_map(&todo, |(m, f)| -> Result<(Side, Side), String> {
         let batches = extract::read_stream(base, name, f)?;
+        let (mut a, mut b) = (Side::default(), Side::default());
         month_pass(base, name, m, &batches, &sess_a, samples, &mut a);
         if let (Some((c, _)), Some(s)) = (&alt, &sess_b) {
             month_pass(c, name, m, &batches, s, 0, &mut b);
         }
-        n_months += 1;
+        let n = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         if tty {
-            eprint!("\r  analyse {name} {m} …");
+            eprint!("\r  analyse {name}: {n}/{n_months} months …");
         }
-    }
+        Ok((a, b))
+    });
     if tty {
-        eprint!("\r{:40}\r", "");
+        eprint!("\r{:50}\r", "");
+    }
+    let (mut a, mut b) = (Side::default(), Side::default());
+    for r in per {
+        let (x, y) = r?;
+        a.merge(x, samples);
+        b.merge(y, 0);
     }
     let alt_on = alt.is_some();
     let bv = |f: &dyn Fn(&Side) -> usize| alt_on.then(|| f(&b));
@@ -208,8 +264,8 @@ pub fn analyse(base: &Config, alt: Option<(&Config, Vec<String>)>, months: Optio
     }
 
     println!("\nclean rules                                   messages   M chars{}   sample", if alt_on { "   what-if" } else { "" });
-    let mut rules: Vec<(&String, &(usize, usize, Vec<String>))> = a.drops.iter().collect();
-    rules.sort_by(|x, y| y.1.0.cmp(&x.1.0));
+    let mut rules: Vec<(&String, &Dropped)> = a.drops.iter().collect();
+    rules.sort_by_key(|r| std::cmp::Reverse(r.1.0));
     let mut labels: Vec<&String> = rules.iter().map(|r| r.0).collect();
     for l in b.drops.keys() {
         if !a.drops.contains_key(l) {
@@ -234,14 +290,14 @@ pub fn analyse(base: &Config, alt: Option<(&Config, Vec<String>)>, months: Optio
     let h = &a.hist;
     println!("\nchunks per message   1: {} · 2: {} · 3-5: {} · 6-10: {} · >10: {}", num(h[0]), num(h[1]), num(h[2]), num(h[3]),
              num(h[4]));
-    a.biggest.sort_by(|x, y| y.0.cmp(&x.0));
+    a.biggest.sort_by_key(|x| std::cmp::Reverse(x.0));
     for (n, ch, m, r, t) in a.biggest.iter().take(top) {
         println!("  {:>5} chunks {:>6} M chars  {m} {r:<9} {t}", n, mchars(*ch));
     }
 
     println!("\nmost repeated texts (rows holding one chunk text)");
     let mut rep: Vec<&(usize, String)> = a.distinct.values().filter(|v| v.0 > 1).collect();
-    rep.sort_by(|x, y| y.0.cmp(&x.0));
+    rep.sort_by_key(|x| std::cmp::Reverse(x.0));
     for (n, t) in rep.iter().take(top) {
         println!("  {:>8} ×  {t}", num(*n));
     }

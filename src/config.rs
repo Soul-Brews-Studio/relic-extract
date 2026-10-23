@@ -176,6 +176,36 @@ pub fn path_of(given: Option<&str>) -> PathBuf {
     PathBuf::from(expand(&p))
 }
 
+fn kind(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "nothing",
+        Value::Bool(_) => "true/false",
+        Value::Number(_) => "a number",
+        Value::String(_) => "a string",
+        Value::Array(_) => "a list",
+        Value::Object(_) => "a table",
+    }
+}
+
+/// Every key the user wrote under [extract] must exist in the defaults, with the same kind of value: a typo
+/// (`min_char = 24`) or a wrong type (`min_chars = "24"`) is an error, never a setting silently ignored.
+fn check(user: &Value, def: &Value, path: &str) -> Result<(), String> {
+    let (Value::Object(u), Value::Object(d)) = (user, def) else { return Ok(()) };
+    for (k, v) in u {
+        let p = format!("{path}.{k}");
+        let Some(dv) = d.get(k) else {
+            let known: Vec<&str> = d.keys().map(String::as_str).collect();
+            return Err(format!("unknown setting {p} (known here: {})", known.join(", ")));
+        };
+        let ok = kind(v) == kind(dv) || (p == "extract.months" && v.is_array());
+        if !ok {
+            return Err(format!("{p} must be {}, not {}", kind(dv), kind(v)));
+        }
+        check(v, dv, &p)?;
+    }
+    Ok(())
+}
+
 pub fn load(given: Option<&str>) -> Result<Config, String> {
     let path = path_of(given);
     let existed = path.exists();
@@ -185,6 +215,9 @@ pub fn load(given: Option<&str>) -> Result<Config, String> {
     } else {
         json!({})
     };
+    if let Some(x) = raw.get("extract") {
+        check(x, &defaults()["extract"], "extract").map_err(|e| format!("{}: {e}", path.display()))?;
+    }
     let mut v = merge(&defaults(), &raw)["extract"].clone();
     for k in ["source", "out"] {
         let s = expand(v[k].as_str().ok_or(format!("{}: [extract] {k} must be a string", path.display()))?);
@@ -253,8 +286,36 @@ pub fn private_dir(d: &Path) -> std::io::Result<()> {
     fs::DirBuilder::new().recursive(true).mode(0o700).create(d)
 }
 
-pub fn private_file(f: &Path) -> std::io::Result<()> {
-    fs::set_permissions(f, fs::Permissions::from_mode(0o600))
+/// Write `path` atomically and privately: `<path>.part` is created 0600 (never readable by others, not even for a
+/// moment), written and synced by `fill`, renamed over `path`, then the folder is synced so the rename survives a
+/// power cut.
+pub fn write_private(path: &Path, fill: impl FnOnce(fs::File) -> Result<(), String>) -> Result<(), String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let dir = path.parent().unwrap_or(Path::new("."));
+    private_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".part");
+    let tmp = PathBuf::from(tmp);
+    let f = fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)
+        .map_err(|e| format!("{}: {e}", tmp.display()))?;
+    f.set_permissions(fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())?; // an older .part kept its mode
+    fill(f).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))?;
+    fs::File::open(dir).and_then(|d| d.sync_all()).map_err(|e| format!("{}: {e}", dir.display()))
+}
+
+/// One run at a time per OUT: an exclusive lock on OUT/.lock, held until the returned file is dropped.
+pub fn lock_out(out: &str) -> Result<fs::File, String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    private_dir(Path::new(out)).map_err(|e| format!("{out}: {e}"))?;
+    let p = Path::new(out).join(".lock");
+    let f = fs::OpenOptions::new().write(true).create(true).truncate(false).mode(0o600).open(&p)
+        .map_err(|e| format!("{}: {e}", p.display()))?;
+    match f.try_lock() {
+        Ok(()) => Ok(f),
+        Err(fs::TryLockError::WouldBlock) => Err(format!("another relic-extract run holds {} — wait for it", p.display())),
+        Err(fs::TryLockError::Error(e)) => Err(format!("{}: {e}", p.display())),
+    }
 }
 
 #[cfg(test)]
@@ -282,6 +343,19 @@ mod tests {
         assert_eq!(set(&mut v, "text", "sessions=main").unwrap(), "sessions");
         assert_eq!(v["sessions"], "main");
         assert!(set(&mut v, "text", "nope=1").is_err());
+    }
+
+    #[test]
+    fn typos_and_wrong_types_are_errors() {
+        let d = defaults()["extract"].clone();
+        let t = |s: &str| toml_to_json(toml::Value::Table(toml::from_str(s).unwrap()));
+        assert!(check(&t("[streams.text.clean]\nmin_char = 24")["streams"], &d["streams"], "extract.streams").unwrap_err()
+            .starts_with("unknown setting extract.streams.text.clean.min_char"));
+        assert!(check(&t("[chunk]\nmax_chars = \"6000\"")["chunk"], &d["chunk"], "extract.chunk").unwrap_err()
+            .contains("must be a number, not a string"));
+        assert!(check(&t("months = [\"2026-10\"]\n[streams.text]\nroles = []"), &d, "extract").is_ok());
+        let tpl = toml_to_json(toml::Value::Table(toml::from_str(TEMPLATE).unwrap()));
+        assert!(check(&tpl["extract"], &d, "extract").is_ok());
     }
 
     #[test]
