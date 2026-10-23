@@ -18,6 +18,7 @@ import re
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -65,26 +66,53 @@ def window_input(con, d, m0, m1):
     return shape, lines, alines
 
 
-_zkey = None
+_zkeys, _zlock, _zi = [], threading.Lock(), [0]
+ZAI_PASS = ("glm/zai-2", "glm/zai-3", "glm/nat-wrw")   # several keys share the load; a 429 on one backs off without stopping the rest
+
+
+def _zai_key():
+    with _zlock:
+        if not _zkeys:
+            for e in ZAI_PASS:
+                k = subprocess.run(["pass", "show", e], capture_output=True, text=True).stdout.splitlines()
+                if k and k[0].strip():
+                    _zkeys.append(k[0].strip())
+        if not _zkeys:
+            raise RuntimeError("z.ai: no key left (every key is out of balance)")
+        _zi[0] += 1
+        return _zkeys[_zi[0] % len(_zkeys)]
+
+
+def _zai_drop(key):
+    """z.ai 1113 (insufficient balance / no resource package) never heals within a run: stop using that key."""
+    with _zlock:
+        if key in _zkeys and len(_zkeys) > 1:
+            _zkeys.remove(key)
+            print(f"  z.ai: a key is out of balance (1113), {len(_zkeys)} left", flush=True)
 
 
 def _zai_call(model, prompt, think):
-    global _zkey
-    if _zkey is None:
-        _zkey = subprocess.run(["pass", "show", "glm/zai-2"], capture_output=True, text=True).stdout.splitlines()[0].strip()
-    b = {"model": model, "max_tokens": 16000, "messages": [{"role": "user", "content": prompt}]}
-    if not think:
-        b["thinking"] = {"type": "disabled"}
-    req = urllib.request.Request("https://api.z.ai/api/anthropic/v1/messages", json.dumps(b).encode(),
-                                 {"content-type": "application/json", "x-api-key": _zkey, "authorization": "Bearer " + _zkey,
-                                  "anthropic-version": "2023-06-01"})
-    for attempt in range(5):
+    # glm-5.3 always thinks (z.ai 1210 "cannot be disabled"): the second try just gives the thinking more room
+    b = {"model": model, "max_tokens": 16000 if think else 32000, "messages": [{"role": "user", "content": prompt}]}
+    data = json.dumps(b).encode()
+    for attempt in range(9):
+        key = _zai_key()
+        req = urllib.request.Request("https://api.z.ai/api/anthropic/v1/messages", data,
+                                     {"content-type": "application/json", "x-api-key": key, "authorization": "Bearer " + key,
+                                      "anthropic-version": "2023-06-01"})
         try:
             with urllib.request.urlopen(req, timeout=600) as r:
                 j = json.loads(r.read())
             break
+        except urllib.error.HTTPError as e:
+            if b"1113" in e.read() or e.code == 401:
+                _zai_drop(key)
+            if attempt == 8:
+                raise
+            wait = e.headers.get("retry-after") if e.code == 429 else None
+            time.sleep(float(wait) if wait and wait.replace(".", "").isdigit() else min(120, 10 * 2 ** attempt if e.code == 429 else 5 * (attempt + 1)))
         except Exception:
-            if attempt == 4:
+            if attempt == 8:
                 raise
             time.sleep(5 * (attempt + 1))
     return "".join(c.get("text", "") for c in j.get("content", []) if c.get("type") == "text"), j.get("stop_reason")
