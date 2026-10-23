@@ -902,6 +902,7 @@ dependencies = [
  "clap",
  "md-5",
  "parquet",
+ "regex",
  "serde",
  "serde_json",
  "toml",

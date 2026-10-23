@@ -13,6 +13,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 clap = { version = "4.6.7", features = ["derive"] }
 md-5 = "0.10"
 serde = "1.0.229"
+regex = "1.13.1"
 parquet = { version = "60.0.0", default-features = false, features = ["arrow", "zstd"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 toml = { version = "0.9", features = ["preserve_order"] }
