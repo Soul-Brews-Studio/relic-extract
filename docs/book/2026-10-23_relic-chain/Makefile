@@ -22,6 +22,7 @@ pdf: $(PDF)
 
 images:
 	python3 cards.py 42
+	python3 cards.py 30 10-config.txt; python3 cards.py 36 17-config-clean.txt; python3 cards.py 38 90-just-list.txt   # shorter, so each fits on its page
 	@for d in diagrams/*.txt; do [ -f "$$d" ] && $(RENDER) $$d images/$$(basename $$d .txt).png; done; true
 
 $(BUILD):

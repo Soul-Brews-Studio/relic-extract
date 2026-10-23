@@ -1,3 +1,4 @@
+$ relic-extract --help
 relic-scan month files -> per-stream, deduped, chunked parts for embedding
 
 Usage: relic-extract [OPTIONS] <COMMAND>
@@ -15,3 +16,4 @@ Options:
       --config <CONFIG>  another config (default ~/.arra/relic.toml, or ARRA_CONFIG)
   -h, --help             Print help
   -V, --version          Print version
+(exit 0 · 0.0 s)

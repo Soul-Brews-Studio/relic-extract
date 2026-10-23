@@ -1,4 +1,4 @@
-$ duckdb: one chunk row
+$ duckdb -c "select month, chunk, role, cat, left(text, 40) AS text, left(key, 12) AS key from '~/.relic-extract/text/2026-10.parquet' limit 3"
 ┌─────────┬───────┬───────────┬─────────────┬───────────────────────────────────────────┬──────────────┐
 │  month  │ chunk │   role    │     cat     │                   text                    │     key      │
 │ varchar │ int64 │  varchar  │   varchar   │                  varchar                  │   varchar    │
