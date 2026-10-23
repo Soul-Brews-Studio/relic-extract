@@ -129,6 +129,9 @@ part("part.year");
     t("rhythm.note"));
 }
 
+// day by day: the calendar (days.js)
+if (typeof daySection === "function") daySection();
+
 // 8. language
 {
   const ts = T.thai_share, top = argmax(ts);

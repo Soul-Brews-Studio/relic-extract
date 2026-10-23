@@ -255,3 +255,26 @@ fn a_second_run_waits_for_the_lock() {
     assert!(relic_extract::run::run(&cfg, None, false, None).is_ok());
     let _ = fs::remove_dir_all(&d);
 }
+
+#[test]
+fn after_runs_once_the_lock_is_released() {
+    let (d, cfgp) = fixture("after");
+    let seen = d.join("after.txt");
+    let mut body = fs::read_to_string(&cfgp).unwrap();
+    body = body.replace("[extract]\n", &format!("[extract]\nafter = \"printf '%s|%s' \\\"$RELIC_EXTRACT_CUT\\\" \\\"$RELIC_EXTRACT_OUT\\\" > {}\"\n", seen.display()));
+    fs::write(&cfgp, body).unwrap();
+    let cfg = relic_extract::config::load(Some(cfgp.to_str().unwrap())).unwrap();
+    let done = relic_extract::run::run(&cfg, None, false, None).unwrap();
+    // the lock is free again before the hook runs: a push may take it
+    drop(relic_extract::config::lock_out(cfg.out()).unwrap());
+    relic_extract::run::after(&cfg, &done).unwrap();
+    let got = fs::read_to_string(&seen).unwrap();
+    assert_eq!(got, format!("text/2026-10.parquet|{}", d.join("out").display()));
+    // nothing cut: the hook does not run
+    fs::remove_file(&seen).unwrap();
+    let again = relic_extract::run::run(&cfg, None, false, None).unwrap();
+    assert!(again.is_empty());
+    relic_extract::run::after(&cfg, &again).unwrap();
+    assert!(!seen.exists());
+    let _ = fs::remove_dir_all(&d);
+}

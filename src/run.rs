@@ -137,6 +137,30 @@ pub fn run(cfg: &Config, months: Option<Vec<String>>, force: bool, only: Option<
     Ok(done)
 }
 
+/// `[extract] after`: once `run` has returned (OUT/.lock released, so a push that takes it does not wait on us),
+/// run the command through `sh -c` if any part was cut, with RELIC_EXTRACT_CUT (the parts, comma separated,
+/// relative to OUT) and RELIC_EXTRACT_OUT in its env. A command that fails is an error.
+pub fn after(cfg: &Config, done: &[extract::Done]) -> Result<(), String> {
+    let Some(cmd) = cfg.after() else { return Ok(()) };
+    if done.is_empty() {
+        return Ok(());
+    }
+    let cut: Vec<&str> = done.iter().map(|d| d.part.as_str()).collect();
+    eprintln!("after: {cmd}");
+    let st = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .env("RELIC_EXTRACT_CUT", cut.join(","))
+        .env("RELIC_EXTRACT_OUT", cfg.out())
+        .status()
+        .map_err(|e| format!("after: {e}"))?;
+    if st.success() {
+        Ok(())
+    } else {
+        Err(format!("after: exited {}", st.code().map_or("by a signal".into(), |c| c.to_string())))
+    }
+}
+
 pub fn status(cfg: &Config) {
     for name in config::STREAMS {
         let on = if cfg.stream(name)["enabled"] == true { "on " } else { "off" };

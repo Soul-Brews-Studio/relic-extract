@@ -239,7 +239,7 @@ def tidy(data, out: Path):
 def page(data):
     html = (HERE / "index.html").read_text()
     css = (HERE / "report.css").read_text()
-    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "report.js", "deep.js", "focus.js", "oracles.js", "memory.js", "months.js", "nav.js"))
+    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "days.js", "report.js", "pictures.js", "deep.js", "focus.js", "oracles.js", "memory.js", "months.js", "nav.js"))
     html = html.replace("/*I18N*/", (HERE / "i18n.js").read_text())
     blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     return html.replace("/*CSS*/", css).replace("/*JS*/", js).replace("/*DATA*/null", blob)
@@ -288,6 +288,18 @@ def main():
     ap_ = Path(a.extract).expanduser() / "report" / "asks.json"
     if ap_.exists() and not a.public:  # asks.py's output: quoted passages, so the private view only
         data["asks"] = json.loads(ap_.read_text())
+    dp = Path(a.extract).expanduser() / "report" / "days.json"
+    if dp.exists():  # days.py's output; the share and public views keep each day's numbers, not its summary
+        dd = json.loads(dp.read_text())
+        if a.public or a.share:
+            for d in dd["days"]:
+                d["summary"] = None
+                if a.public:
+                    d["repos"] = []
+        data["days"] = dd
+    pp = Path(a.extract).expanduser() / "report" / "pictures.json"
+    if pp.exists() and not a.public:  # pictures.py's output: topic names and typed words, no passages
+        data["pictures"] = json.loads(pp.read_text())
     mp = Path(a.extract).expanduser() / "report" / "memory.json"
     if mp.exists() and not a.public:  # memory.py's output: names oracles, no note text
         data["memory"] = json.loads(mp.read_text())
