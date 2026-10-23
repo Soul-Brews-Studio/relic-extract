@@ -239,7 +239,7 @@ def tidy(data, out: Path):
 def page(data):
     html = (HERE / "index.html").read_text()
     css = (HERE / "report.css").read_text()
-    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "report.js", "deep.js", "months.js", "nav.js"))
+    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "report.js", "deep.js", "focus.js", "months.js", "nav.js"))
     html = html.replace("/*I18N*/", (HERE / "i18n.js").read_text())
     blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     return html.replace("/*CSS*/", css).replace("/*JS*/", js).replace("/*DATA*/null", blob)
@@ -262,6 +262,10 @@ def main():
             v = {"months": v["months"], "growth": v["growth"], "ship": v["ship"], "friction": v["friction"],
                  "works": {"by_month": v["works"]["by_month"], "shipped": v["works"]["shipped"], "by_topic": [], "by_oracle": [], "flows": []}}
         data["vspace"] = v
+    fp = Path(a.extract).expanduser() / "report" / "focus.json"
+    if fp.exists():  # focus.py's output; the public view keeps only the monthly split by family
+        f = json.loads(fp.read_text())
+        data["focus"] = {"months": f["months"], "story": f["story"], "families": {}} if a.public else f
     tp = out / "topics.json" if not a.public else Path(a.extract).expanduser() / "report" / "topics.json"
     if tp.exists():  # topics.py's output; the public view drops the example prompts
         data["topics"] = json.loads(tp.read_text())

@@ -120,21 +120,34 @@ The cut and the keys are the same as agent-relic-v4's `split` (recipe `text-v1`)
 
 ## Report: month by month
 
-`report/` turns the chain's output into one self-contained page: scan → extract → embed → topics → report.
+`report/` turns the chain's output into one long, self-contained page: scan → extract → embed → topics → vector
+space → report. It makes no network calls; every number comes from the data.
 
 ```
 just embed          # relic4 embeds the text parts (gb300); vectors land in its cache, keyed by chunk key
-just topics         # k-means on the prompt vectors -> ~/.relic-extract/report/topics.json
-just report         # DuckDB aggregates + topics -> ~/.relic-extract/report/index.html (+ report.json, monthly.parquet)
-just report-public  # the same with counts only: no repository, skill or example text -> report-public/
+just embed-streams  # the same for thinking and tools: one LanceDB table each, with an ICU index
+just topics         # k-means on the prompt vectors -> ~/.relic-extract/report/topics.json, topic_of.parquet
+just vspace         # oracles, what works, growth, lessons -> ~/.relic-extract/report/vspace.json
+just report         # DuckDB aggregates + the above -> ~/.relic-extract/report/index.html (+ report.json, monthly.parquet)
+just report-public  # counts only: no repository, skill, example or lesson text -> report-public/
+just search "QUERY" # ICU keywords + vector meaning over text, thinking and tools, fused (reciprocal rank fusion)
 ```
 
-Perspectives, one section each: what the index holds, who writes the prompts (main sessions, agent to agent,
-harness text), agents spawning agents, engines, tools and their error rate, thinking saved vs signature only,
-the hour and weekday prompts come in, Thai vs English, how long a conversation lasts, skills, repositories,
-new repositories, and the topics: prompts per topic per month, each month's main topics, a map of the topics.
-The page makes no network calls; numbers come only from the data. `monthly.parquet` holds every number as
-(month, metric, series, value) for DuckDB.
+The page has three parts, and a column of warp dots on the right (`]` next, `[` previous, `t` top):
+
+- **The whole year:** what the index holds, who writes the prompts (main sessions, agent to agent, harness
+  text), agents spawning agents, engines, tools and errors, thinking saved vs signature only, the hour and weekday
+  prompts come in, Thai vs English, conversation length, topics (per month, each month's main ones, a map),
+  skills, repositories, new repositories, how long tools and sessions take, and the history-search tools.
+- **The vector space:** which oracle does what (each repository's centre, its nearest others, its topic mix),
+  oracle × topic, what works (whether the next prompt ships or pushes back, by topic, repository and month),
+  growth (breadth, new vs repeated prompts, drift), and lessons learned per month (vector search).
+- **The months, one by one:** every month in full against the month before.
+
+An overview card at the top lists every section's finding in one line. Words go through `t()` (`report/i18n.js`):
+English by default, Thai on the language button or `?lang=th`. `monthly.parquet` holds the numbers as
+(month, metric, series, value) for DuckDB. Topic names are hand-given in `report/topic-names.json`, keyed by a
+topic's three top words; when a re-run moves the words, the name falls away rather than going stale.
 
 ## Docs
 

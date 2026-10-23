@@ -45,6 +45,18 @@ verify: build
 embed:
     cd ../agent-relic-v4 && RELIC4_RECIPE=text-v2 RELIC4_EMBED_WHERE=remote uv run relic4 embed text-v2
 
+# thinking and tools embedded with relic4's embed step -> RELIC4_ROOT/vec/streams/<model>/<stream>.lance
+embed-streams:
+    uv run --project ../agent-relic-v4 python report/embed_streams.py
+
+# the vector space read for patterns -> ~/.relic-extract/report/vspace.json
+vspace:
+    uv run --project ../agent-relic-v4 python report/vspace.py
+
+# ICU + vector over text, thinking and tools, fused
+search *ARGS:
+    uv run --project ../agent-relic-v4 python report/search.py {{ARGS}}
+
 # topics from the prompt vectors -> ~/.relic-extract/report/topics.json
 topics *ARGS:
     uv run --with scikit-learn --with pythainlp python report/topics.py {{ARGS}}
