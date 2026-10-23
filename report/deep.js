@@ -109,6 +109,7 @@
     }
 
     if (typeof workSection === "function") workSection();
+    if (typeof switchSection === "function") switchSection();
 
     // growth
     if (V.growth) {
