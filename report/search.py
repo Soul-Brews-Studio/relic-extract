@@ -28,7 +28,7 @@ def tables():
     if (t / "text.lance").exists():
         out["text"] = lancedb.connect(str(t)).open_table("text")
     s = ROOT / "vec" / "streams" / SLUG
-    for name in ("thinking", "tools"):
+    for name in ("thinking", "tools", "vault"):
         if (s / f"{name}.lance").exists():
             out[name] = lancedb.connect(str(s)).open_table(name)
     return out
@@ -45,7 +45,7 @@ def q(v):
     return "'" + str(v).replace("'", "''") + "'"
 
 
-def search(query, n=15, streams=("text", "thinking", "tools"), month=None, repo=None, role=None, mode="both", tabs=None, enc=None):
+def search(query, n=15, streams=("text", "thinking", "tools", "vault"), month=None, repo=None, role=None, mode="both", tabs=None, enc=None):
     """Fused hits for one query: [{stream, msgkey, ts_th, role, name, cat, text, score, lanes}, ...]."""
     tabs = {k: v for k, v in (tabs or tables()).items() if k in streams}
     conds = ["probe = false"] + [f"{c} = {q(v)}" for c, v in (("month", month), ("cat", repo), ("role", role)) if v]
@@ -83,7 +83,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("query")
     ap.add_argument("-n", type=int, default=15)
-    ap.add_argument("--stream", default="text,thinking,tools")
+    ap.add_argument("--stream", default="text,thinking,tools,vault")
     ap.add_argument("--month")
     ap.add_argument("--repo")
     ap.add_argument("--role")

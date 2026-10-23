@@ -239,7 +239,7 @@ def tidy(data, out: Path):
 def page(data):
     html = (HERE / "index.html").read_text()
     css = (HERE / "report.css").read_text()
-    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "report.js", "deep.js", "focus.js", "months.js", "nav.js"))
+    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "report.js", "deep.js", "focus.js", "oracles.js", "memory.js", "months.js", "nav.js"))
     html = html.replace("/*I18N*/", (HERE / "i18n.js").read_text())
     blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     return html.replace("/*CSS*/", css).replace("/*JS*/", js).replace("/*DATA*/null", blob)
@@ -288,6 +288,12 @@ def main():
     ap_ = Path(a.extract).expanduser() / "report" / "asks.json"
     if ap_.exists() and not a.public:  # asks.py's output: quoted passages, so the private view only
         data["asks"] = json.loads(ap_.read_text())
+    mp = Path(a.extract).expanduser() / "report" / "memory.json"
+    if mp.exists() and not a.public:  # memory.py's output: names oracles, no note text
+        data["memory"] = json.loads(mp.read_text())
+    op = Path(a.extract).expanduser() / "report" / "oracles.json"
+    if op.exists() and not a.public:  # oracles.py's output: names repositories, so not in the counts-only view
+        data["oracles"] = json.loads(op.read_text())
     fp = Path(a.extract).expanduser() / "report" / "focus.json"
     if fp.exists():  # focus.py's output; the public view keeps only the monthly split by family
         f = json.loads(fp.read_text())

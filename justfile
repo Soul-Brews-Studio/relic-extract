@@ -46,8 +46,8 @@ embed:
     cd ../agent-relic-v4 && RELIC4_RECIPE=text-v2 RELIC4_EMBED_WHERE=remote uv run relic4 embed text-v2
 
 # thinking and tools embedded with relic4's embed step -> RELIC4_ROOT/vec/streams/<model>/<stream>.lance
-embed-streams:
-    uv run --project ../agent-relic-v4 python report/embed_streams.py
+embed-streams *STREAMS:
+    uv run --project ../agent-relic-v4 python report/embed_streams.py {{STREAMS}}
 
 # the vector space read for patterns -> ~/.relic-extract/report/vspace.json
 vspace:
@@ -56,6 +56,18 @@ vspace:
 # ICU + vector over text, thinking and tools, fused
 search *ARGS:
     uv run --project ../agent-relic-v4 python report/search.py {{ARGS}}
+
+# ψ vault notes as a stream -> ~/.relic-extract/vault/notes.parquet (then: just embed-streams vault)
+vaults:
+    uv run python report/vaults.py
+
+# oracles: born, for what, how long, used, works -> ~/.relic-extract/report/oracles.json
+oracles:
+    uv run python report/oracles.py
+
+# each oracle's vault against its own sessions -> ~/.relic-extract/report/memory.json
+memory:
+    uv run --project ../agent-relic-v4 python report/memory.py
 
 # topics from the prompt vectors -> ~/.relic-extract/report/topics.json
 topics *ARGS:
