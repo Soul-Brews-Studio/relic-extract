@@ -61,6 +61,14 @@ search *ARGS:
 vaults:
     uv run python report/vaults.py
 
+# example questions for the page, answered by the fused search -> ~/.relic-extract/report/asks.json
+asks:
+    uv run --project ../agent-relic-v4 python report/asks.py
+
+# maw and relic: features, arcs, lessons -> ~/.relic-extract/report/focus.json
+focus:
+    uv run --project ../agent-relic-v4 --with scikit-learn --with pythainlp python report/focus.py
+
 # oracles: born, for what, how long, used, works -> ~/.relic-extract/report/oracles.json
 oracles:
     uv run python report/oracles.py

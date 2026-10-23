@@ -128,12 +128,24 @@ just embed          # relic4 embeds the text parts (gb300); vectors land in its 
 just embed-streams  # the same for thinking and tools: one LanceDB table each, with an ICU index
 just topics         # k-means on the prompt vectors -> ~/.relic-extract/report/topics.json, topic_of.parquet
 just vspace         # oracles, what works, growth, lessons -> ~/.relic-extract/report/vspace.json
+just vaults         # every ψ vault note as a stream -> ~/.relic-extract/vault/notes.parquet
+just embed-streams vault   # ... embedded like the others (shared cache: a mirrored note is embedded once)
+just focus          # maw and relic: features from their own vectors, arcs, lessons -> focus.json
+just oracles        # oracles: born, for what, how long, used, whether they work -> oracles.json
+just memory         # each oracle's vault against its own sessions, one vector space -> memory.json
 just report         # DuckDB aggregates + the above -> ~/.relic-extract/report/index.html (+ report.json, monthly.parquet)
 just report-public  # counts only: no repository, skill, example or lesson text -> report-public/
-just search "QUERY" # ICU keywords + vector meaning over text, thinking and tools, fused (reciprocal rank fusion)
+just asks           # example questions answered by the fused search -> asks.json
+just search "QUERY" # ICU keywords + vector meaning over text, thinking, tools and the vaults, fused (RRF)
+just publish        # the share view (every number, no quoted text) -> relic.buildwithoracle.com/report
 ```
 
-The page has three parts, and a column of warp dots on the right (`]` next, `[` previous, `t` top):
+Three views come out of one build: **private** (`report/`, quotes examples and lessons, stays local),
+**share** (`report-share/`, every chart and name but no quoted passage and no machine-picked word; `just publish`
+refuses to deploy if gitleaks finds anything) and **public** (`report-public/`, counts only).
+
+The page reads top to bottom like a long document, or step by step like slides: Back and Next (and ← →) move one
+section, a map on the right names every part, section and month. Its parts:
 
 - **The whole year:** what the index holds, who writes the prompts (main sessions, agent to agent, harness
   text), agents spawning agents, engines, tools and errors, thinking saved vs signature only, the hour and weekday
@@ -142,6 +154,11 @@ The page has three parts, and a column of warp dots on the right (`]` next, `[` 
 - **The vector space:** which oracle does what (each repository's centre, its nearest others, its topic mix),
   oracle × topic, what works (whether the next prompt ships or pushes back, by topic, repository and month),
   growth (breadth, new vs repeated prompts, drift), and lessons learned per month (vector search).
+- **Focus, maw and relic:** each family's repositories over time, its features (clusters of its own prompt vectors,
+  named by hand), how each repository started and where it stands, its tools, skills, follow-ups and lessons.
+- **The oracles:** how they are born (and with which skill), what for, how long they live, how they are used, and
+  whether they work; then what the ψ vaults hold and whether each oracle's vault knows what it was asked.
+- **Ask the index:** example questions answered by the fused search.
 - **The months, one by one:** every month in full against the month before.
 
 An overview card at the top lists every section's finding in one line. Words go through `t()` (`report/i18n.js`):
