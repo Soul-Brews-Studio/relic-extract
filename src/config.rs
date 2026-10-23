@@ -215,6 +215,27 @@ pub fn load(given: Option<&str>) -> Result<Config, String> {
     Ok(Config { v, path, existed })
 }
 
+/// `--what-if KEY=VALUE`: change one setting in memory. KEY is a dotted path inside [extract]
+/// (`chunk.max_chars`, `streams.text.clean.min_chars`); a bare or short key is looked up in
+/// streams.<stream>.clean, then streams.<stream>, then chunk, then [extract]. VALUE is TOML (24, true, ["a"], "x");
+/// anything that does not parse as TOML is taken as a string.
+pub fn set(v: &mut Value, stream: &str, kv: &str) -> Result<String, String> {
+    let (k, val) = kv.split_once('=').ok_or(format!("--what-if {kv}: needs KEY=VALUE"))?;
+    let (k, val) = (k.trim(), val.trim());
+    let parsed = toml::from_str::<toml::Table>(&format!("v = {val}")).ok().and_then(|mut t| t.remove("v"))
+        .map(toml_to_json).unwrap_or(Value::String(val.to_string()));
+    let tries = [format!("streams.{stream}.clean.{k}"), format!("streams.{stream}.{k}"), format!("chunk.{k}"), k.to_string()];
+    let found = |path: &str| path.split('.').try_fold(&*v, |cur, p| cur.get(p)).is_some();
+    let path = tries.iter().find(|p| found(p)).cloned()
+        .ok_or(format!("--what-if {k}: no such setting (try `relic-extract config`)"))?;
+    let mut cur = &mut *v;
+    for p in path.split('.') {
+        cur = cur.get_mut(p).unwrap();
+    }
+    *cur = parsed;
+    Ok(path)
+}
+
 /// Write the template if no config is there. Returns (path, written).
 pub fn init(given: Option<&str>) -> std::io::Result<(PathBuf, bool)> {
     let p = path_of(given);
@@ -248,6 +269,19 @@ mod tests {
         c.raw();
         assert_eq!(c.stream_hash("text"), "f4fda3dd0075a191");
         assert_ne!(cleaned, "f4fda3dd0075a191"); // the clean step's settings re-cut every month
+    }
+
+    #[test]
+    fn what_if_finds_short_keys() {
+        let mut v = defaults()["extract"].clone();
+        assert_eq!(set(&mut v, "text", "min_chars=24").unwrap(), "streams.text.clean.min_chars");
+        assert_eq!(v["streams"]["text"]["clean"]["min_chars"], 24);
+        assert_eq!(set(&mut v, "text", "max_chars = 2000").unwrap(), "chunk.max_chars");
+        assert_eq!(set(&mut v, "text", "roles=[\"user\"]").unwrap(), "streams.text.roles");
+        assert_eq!(v["streams"]["text"]["roles"], json!(["user"]));
+        assert_eq!(set(&mut v, "text", "sessions=main").unwrap(), "sessions");
+        assert_eq!(v["sessions"], "main");
+        assert!(set(&mut v, "text", "nope=1").is_err());
     }
 
     #[test]
