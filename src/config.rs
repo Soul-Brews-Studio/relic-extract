@@ -142,9 +142,15 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn source(&self) -> &str { self.v["source"].as_str().unwrap_or("") }
-    pub fn out(&self) -> &str { self.v["out"].as_str().unwrap_or("") }
-    pub fn stream(&self, name: &str) -> &Value { &self.v["streams"][name] }
+    pub fn source(&self) -> &str {
+        self.v["source"].as_str().unwrap_or("")
+    }
+    pub fn out(&self) -> &str {
+        self.v["out"].as_str().unwrap_or("")
+    }
+    pub fn stream(&self, name: &str) -> &Value {
+        &self.v["streams"][name]
+    }
 
     /// The Python reference's behaviour: every role, no clean step, main-tier sessions (`run --raw`, `just parity`).
     pub fn raw(&mut self) {
@@ -156,9 +162,15 @@ impl Config {
         }
         self.v["sessions"] = Value::String("main".into());
     }
-    pub fn content_dedupe(&self) -> bool { self.v["dedupe"]["key"] == "content" }
-    pub fn max_chars(&self) -> usize { self.v["chunk"]["max_chars"].as_u64().unwrap_or(6000) as usize }
-    pub fn overlap(&self) -> usize { self.v["chunk"]["overlap"].as_u64().unwrap_or(400) as usize }
+    pub fn content_dedupe(&self) -> bool {
+        self.v["dedupe"]["key"] == "content"
+    }
+    pub fn max_chars(&self) -> usize {
+        self.v["chunk"]["max_chars"].as_u64().unwrap_or(6000) as usize
+    }
+    pub fn overlap(&self) -> usize {
+        self.v["chunk"]["overlap"].as_u64().unwrap_or(400) as usize
+    }
 
     /// What a part of this stream depends on, besides its source month: change it and every month is cut again.
     /// Same bytes as the Python version (json.dumps sort_keys -> blake2b-8), so its parts stay fresh.
@@ -167,13 +179,52 @@ impl Config {
         if self.v["sessions"] != "main" {
             deps["sessions"] = self.v["sessions"].clone(); // "main" hashes as before, so --raw matches the Python version
         }
-        blake2b_simd::Params::new().hash_length(8).hash(crate::json::py_dumps(&deps).as_bytes()).to_hex().to_string()
+        blake2b_simd::Params::new()
+            .hash_length(8)
+            .hash(crate::json::py_dumps(&deps).as_bytes())
+            .to_hex()
+            .to_string()
     }
 }
 
 pub fn path_of(given: Option<&str>) -> PathBuf {
-    let p = given.map(str::to_string).or_else(|| std::env::var("ARRA_CONFIG").ok()).unwrap_or("~/.arra/relic.toml".into());
+    let p = given
+        .map(str::to_string)
+        .or_else(|| std::env::var("ARRA_CONFIG").ok())
+        .unwrap_or("~/.arra/relic.toml".into());
     PathBuf::from(expand(&p))
+}
+
+fn kind(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "nothing",
+        Value::Bool(_) => "true/false",
+        Value::Number(_) => "a number",
+        Value::String(_) => "a string",
+        Value::Array(_) => "a list",
+        Value::Object(_) => "a table",
+    }
+}
+
+/// Every key the user wrote under [extract] must exist in the defaults, with the same kind of value: a typo
+/// (`min_char = 24`) or a wrong type (`min_chars = "24"`) is an error, never a setting silently ignored.
+fn check(user: &Value, def: &Value, path: &str) -> Result<(), String> {
+    let (Value::Object(u), Value::Object(d)) = (user, def) else {
+        return Ok(());
+    };
+    for (k, v) in u {
+        let p = format!("{path}.{k}");
+        let Some(dv) = d.get(k) else {
+            let known: Vec<&str> = d.keys().map(String::as_str).collect();
+            return Err(format!("unknown setting {p} (known here: {})", known.join(", ")));
+        };
+        let ok = kind(v) == kind(dv) || (p == "extract.months" && v.is_array());
+        if !ok {
+            return Err(format!("{p} must be {}, not {}", kind(dv), kind(v)));
+        }
+        check(v, dv, &p)?;
+    }
+    Ok(())
 }
 
 pub fn load(given: Option<&str>) -> Result<Config, String> {
@@ -181,26 +232,43 @@ pub fn load(given: Option<&str>) -> Result<Config, String> {
     let existed = path.exists();
     let raw = if existed {
         let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        toml_to_json(toml::Value::Table(toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?))
+        toml_to_json(toml::Value::Table(
+            toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?,
+        ))
     } else {
         json!({})
     };
+    if let Some(x) = raw.get("extract") {
+        check(x, &defaults()["extract"], "extract").map_err(|e| format!("{}: {e}", path.display()))?;
+    }
     let mut v = merge(&defaults(), &raw)["extract"].clone();
     for k in ["source", "out"] {
-        let s = expand(v[k].as_str().ok_or(format!("{}: [extract] {k} must be a string", path.display()))?);
+        let s = expand(
+            v[k].as_str()
+                .ok_or(format!("{}: [extract] {k} must be a string", path.display()))?,
+        );
         v[k] = Value::String(s);
     }
     let p = path.display();
-    let bad: Vec<&String> = v["streams"].as_object().map(|m| m.keys().filter(|k| !STREAMS.contains(&k.as_str())).collect())
+    let bad: Vec<&String> = v["streams"]
+        .as_object()
+        .map(|m| m.keys().filter(|k| !STREAMS.contains(&k.as_str())).collect())
         .unwrap_or_default();
     if !bad.is_empty() {
         let bad: Vec<&str> = bad.iter().map(|s| s.as_str()).collect();
-        return Err(format!("{p}: unknown stream(s) {} (known: {})", bad.join(", "), STREAMS.join(", ")));
+        return Err(format!(
+            "{p}: unknown stream(s) {} (known: {})",
+            bad.join(", "),
+            STREAMS.join(", ")
+        ));
     }
     if !matches!(v["dedupe"]["key"].as_str(), Some("content" | "h")) {
         return Err(format!("{p}: [extract.dedupe] key must be \"content\" or \"h\""));
     }
-    let (mc, ov) = (v["chunk"]["max_chars"].as_i64().unwrap_or(-1), v["chunk"]["overlap"].as_i64().unwrap_or(-1));
+    let (mc, ov) = (
+        v["chunk"]["max_chars"].as_i64().unwrap_or(-1),
+        v["chunk"]["overlap"].as_i64().unwrap_or(-1),
+    );
     if !(0 <= ov && ov < mc) {
         return Err(format!("{p}: [extract.chunk] needs 0 <= overlap < max_chars"));
     }
@@ -210,7 +278,11 @@ pub fn load(given: Option<&str>) -> Result<Config, String> {
     match &v["months"] {
         Value::String(s) if s == "changed" || s == "all" => {}
         Value::Array(a) if a.iter().all(Value::is_string) => {}
-        _ => return Err(format!("{p}: [extract] months must be \"changed\", \"all\" or a list of \"YYYY-MM\"")),
+        _ => {
+            return Err(format!(
+                "{p}: [extract] months must be \"changed\", \"all\" or a list of \"YYYY-MM\""
+            ));
+        }
     }
     Ok(Config { v, path, existed })
 }
@@ -222,11 +294,22 @@ pub fn load(given: Option<&str>) -> Result<Config, String> {
 pub fn set(v: &mut Value, stream: &str, kv: &str) -> Result<String, String> {
     let (k, val) = kv.split_once('=').ok_or(format!("--what-if {kv}: needs KEY=VALUE"))?;
     let (k, val) = (k.trim(), val.trim());
-    let parsed = toml::from_str::<toml::Table>(&format!("v = {val}")).ok().and_then(|mut t| t.remove("v"))
-        .map(toml_to_json).unwrap_or(Value::String(val.to_string()));
-    let tries = [format!("streams.{stream}.clean.{k}"), format!("streams.{stream}.{k}"), format!("chunk.{k}"), k.to_string()];
+    let parsed = toml::from_str::<toml::Table>(&format!("v = {val}"))
+        .ok()
+        .and_then(|mut t| t.remove("v"))
+        .map(toml_to_json)
+        .unwrap_or(Value::String(val.to_string()));
+    let tries = [
+        format!("streams.{stream}.clean.{k}"),
+        format!("streams.{stream}.{k}"),
+        format!("chunk.{k}"),
+        k.to_string(),
+    ];
     let found = |path: &str| path.split('.').try_fold(&*v, |cur, p| cur.get(p)).is_some();
-    let path = tries.iter().find(|p| found(p)).cloned()
+    let path = tries
+        .iter()
+        .find(|p| found(p))
+        .cloned()
         .ok_or(format!("--what-if {k}: no such setting (try `relic-extract config`)"))?;
     let mut cur = &mut *v;
     for p in path.split('.') {
@@ -253,8 +336,49 @@ pub fn private_dir(d: &Path) -> std::io::Result<()> {
     fs::DirBuilder::new().recursive(true).mode(0o700).create(d)
 }
 
-pub fn private_file(f: &Path) -> std::io::Result<()> {
-    fs::set_permissions(f, fs::Permissions::from_mode(0o600))
+/// Write `path` atomically and privately: `<path>.part` is created 0600 (never readable by others, not even for a
+/// moment), written and synced by `fill`, renamed over `path`, then the folder is synced so the rename survives a
+/// power cut.
+pub fn write_private(path: &Path, fill: impl FnOnce(fs::File) -> Result<(), String>) -> Result<(), String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let dir = path.parent().unwrap_or(Path::new("."));
+    private_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".part");
+    let tmp = PathBuf::from(tmp);
+    let f = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&tmp)
+        .map_err(|e| format!("{}: {e}", tmp.display()))?;
+    f.set_permissions(fs::Permissions::from_mode(0o600))
+        .map_err(|e| e.to_string())?; // an older .part kept its mode
+    fill(f).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))?;
+    fs::File::open(dir)
+        .and_then(|d| d.sync_all())
+        .map_err(|e| format!("{}: {e}", dir.display()))
+}
+
+/// One run at a time per OUT: an exclusive lock on OUT/.lock, held until the returned file is dropped.
+pub fn lock_out(out: &str) -> Result<fs::File, String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    private_dir(Path::new(out)).map_err(|e| format!("{out}: {e}"))?;
+    let p = Path::new(out).join(".lock");
+    let f = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(&p)
+        .map_err(|e| format!("{}: {e}", p.display()))?;
+    match f.try_lock() {
+        Ok(()) => Ok(f),
+        Err(fs::TryLockError::WouldBlock) => Err(format!("another relic-extract run holds {} — wait for it", p.display())),
+        Err(fs::TryLockError::Error(e)) => Err(format!("{}: {e}", p.display())),
+    }
 }
 
 #[cfg(test)]
@@ -264,7 +388,11 @@ mod tests {
     #[test]
     fn raw_text_hash_matches_python() {
         // ~/.relic-extract/text/_extract.json written by the Python version with the default settings
-        let mut c = Config { v: defaults()["extract"].clone(), path: PathBuf::new(), existed: false };
+        let mut c = Config {
+            v: defaults()["extract"].clone(),
+            path: PathBuf::new(),
+            existed: false,
+        };
         let cleaned = c.stream_hash("text");
         c.raw();
         assert_eq!(c.stream_hash("text"), "f4fda3dd0075a191");
@@ -282,6 +410,29 @@ mod tests {
         assert_eq!(set(&mut v, "text", "sessions=main").unwrap(), "sessions");
         assert_eq!(v["sessions"], "main");
         assert!(set(&mut v, "text", "nope=1").is_err());
+    }
+
+    #[test]
+    fn typos_and_wrong_types_are_errors() {
+        let d = defaults()["extract"].clone();
+        let t = |s: &str| toml_to_json(toml::Value::Table(toml::from_str(s).unwrap()));
+        assert!(
+            check(
+                &t("[streams.text.clean]\nmin_char = 24")["streams"],
+                &d["streams"],
+                "extract.streams"
+            )
+            .unwrap_err()
+            .starts_with("unknown setting extract.streams.text.clean.min_char")
+        );
+        assert!(
+            check(&t("[chunk]\nmax_chars = \"6000\"")["chunk"], &d["chunk"], "extract.chunk")
+                .unwrap_err()
+                .contains("must be a number, not a string")
+        );
+        assert!(check(&t("months = [\"2026-10\"]\n[streams.text]\nroles = []"), &d, "extract").is_ok());
+        let tpl = toml_to_json(toml::Value::Table(toml::from_str(TEMPLATE).unwrap()));
+        assert!(check(&tpl["extract"], &d, "extract").is_ok());
     }
 
     #[test]

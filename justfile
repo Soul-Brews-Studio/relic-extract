@@ -36,3 +36,7 @@ test-rs:
 # Rust vs Python parts, every row and column (writes only ~/.relic-extract-parity)
 parity STREAM="text": build
     scripts/parity.sh {{STREAM}}
+
+# raw and cleaned cut vs their references, on a frozen source (scripts/verify.sh)
+verify: build
+    scripts/verify.sh

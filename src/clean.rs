@@ -1,5 +1,6 @@
 //! The clean step: what a message's text becomes before it is cut, for a stream with `[extract.streams.<s>.clean]`.
 //!
+//! ```text
 //!   1. strip_tags      remove <tag>…</tag> blocks anywhere (an unclosed one runs to the end)
 //!   2. commands        a slash-command wrapper (<command-name>/x … <command-args>a</command-args>):
 //!                      "args" -> "/x a" (dropped when there are no args) · "drop" · "keep" as it is
@@ -8,6 +9,7 @@
 //!                      starts with one of drop_prefixes · fewer than min_chars characters
 //!   5. redact          secrets relic-scan's 10 rules miss: WireGuard keys, Telegram bot tokens, Discord webhooks
 //!                      and bot tokens, written as [kind:abcd…N] like relic-scan does
+//! ```
 //!
 //! msgkey stays on the raw row (relic4 finds the message by it); key is the blake2b of the cleaned chunk.
 //! Measured on m5 (docs/SCAN-INPUT.md): about 18 % of text chunks are harness text.
@@ -70,7 +72,9 @@ pub struct Clean {
 }
 
 fn strs(v: &Value) -> Vec<String> {
-    v.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default()
+    v.as_array()
+        .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
 }
 
 fn invisible(c: char) -> bool {
@@ -88,10 +92,26 @@ fn rules() -> &'static Vec<Rule> {
     R.get_or_init(|| {
         let r = |p: &str| Regex::new(p).expect("redact rule");
         vec![
-            Rule { kind: "wireguard-key", rx: r(r"(?i)\bPrivateKey\s*=\s*([A-Za-z0-9+/]{42,43}=)"), group: 1 },
-            Rule { kind: "telegram-token", rx: r(r"\b([0-9]{8,10}:AA[A-Za-z0-9_-]{33})\b"), group: 1 },
-            Rule { kind: "discord-webhook", rx: r(r"discord(?:app)?\.com/api/webhooks/[0-9]+/([A-Za-z0-9_-]{50,})"), group: 1 },
-            Rule { kind: "discord-token", rx: r(r"\b([MN][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38})\b"), group: 1 },
+            Rule {
+                kind: "wireguard-key",
+                rx: r(r"(?i)\bPrivateKey\s*=\s*([A-Za-z0-9+/]{42,43}=)"),
+                group: 1,
+            },
+            Rule {
+                kind: "telegram-token",
+                rx: r(r"\b([0-9]{8,10}:AA[A-Za-z0-9_-]{33})\b"),
+                group: 1,
+            },
+            Rule {
+                kind: "discord-webhook",
+                rx: r(r"discord(?:app)?\.com/api/webhooks/[0-9]+/([A-Za-z0-9_-]{50,})"),
+                group: 1,
+            },
+            Rule {
+                kind: "discord-token",
+                rx: r(r"\b([MN][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38})\b"),
+                group: 1,
+            },
         ]
     })
 }
@@ -139,7 +159,8 @@ impl Clean {
         if c["enabled"] != true {
             return None;
         }
-        let strip = strs(&c["strip_tags"]).iter()
+        let strip = strs(&c["strip_tags"])
+            .iter()
             .map(|t| Regex::new(&format!(r"(?s)<{0}>.*?(?:</{0}>|\z)", regex::escape(t))).expect("tag"))
             .collect();
         let commands = match c["commands"].as_str() {
@@ -148,8 +169,12 @@ impl Clean {
             _ => Commands::Args,
         };
         Some(Clean {
-            strip, commands, drop_tags: strs(&c["drop_tags"]), drop_prefixes: strs(&c["drop_prefixes"]),
-            drop_invisible: c["drop_invisible"] != false, min_chars: c["min_chars"].as_u64().unwrap_or(0) as usize,
+            strip,
+            commands,
+            drop_tags: strs(&c["drop_tags"]),
+            drop_prefixes: strs(&c["drop_prefixes"]),
+            drop_invisible: c["drop_invisible"] != false,
+            min_chars: c["min_chars"].as_u64().unwrap_or(0) as usize,
             redact: c["redact"] != false,
         })
     }
@@ -201,8 +226,12 @@ impl Clean {
         if t.is_empty() {
             return Err(if raw.trim().is_empty() {
                 Drop::Empty
-            } else if tr.stripped_chars > 0 && raw.len() != s.len() && !raw.trim_matches(invisible).is_empty()
-                && s.trim_matches(invisible).is_empty() && matches!(s, Cow::Owned(_)) {
+            } else if tr.stripped_chars > 0
+                && raw.len() != s.len()
+                && !raw.trim_matches(invisible).is_empty()
+                && s.trim_matches(invisible).is_empty()
+                && matches!(s, Cow::Owned(_))
+            {
                 Drop::Stripped
             } else if self.drop_invisible {
                 Drop::Invisible
@@ -211,7 +240,8 @@ impl Clean {
             });
         }
         if let Some(i) = self.drop_tags.iter().position(|g| {
-            t.strip_prefix('<').and_then(|r| r.strip_prefix(g.as_str()))
+            t.strip_prefix('<')
+                .and_then(|r| r.strip_prefix(g.as_str()))
                 .is_some_and(|r| r.starts_with('>') || r.starts_with(char::is_whitespace))
         }) {
             return Err(Drop::Tag(i));
@@ -240,9 +270,12 @@ mod tests {
     use serde_json::json;
 
     fn c() -> Clean {
-        Clean::from(&json!({"clean": {"enabled": true, "strip_tags": ["system-reminder"], "commands": "args",
+        Clean::from(
+            &json!({"clean": {"enabled": true, "strip_tags": ["system-reminder"], "commands": "args",
             "drop_tags": ["task-notification", "local-command-stdout"], "drop_prefixes": ["Stop hook feedback:"],
-            "min_chars": 0}})).unwrap()
+            "min_chars": 0}}),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -257,15 +290,25 @@ mod tests {
     fn commands_keep_their_args() {
         let t = "<command-message>goal</command-message>\n<command-name>/goal</command-name>\n<command-args>full analyse</command-args>";
         assert_eq!(c().apply(t).unwrap(), "/goal full analyse");
-        assert_eq!(c().apply("<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args></command-args>"),
-                   Err(Drop::Command));
+        assert_eq!(
+            c().apply(
+                "<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args></command-args>"
+            ),
+            Err(Drop::Command)
+        );
     }
 
     #[test]
     fn drops_harness_turns() {
         assert_eq!(c().apply("<task-notification>\n<task-id>x</task-id>"), Err(Drop::Tag(0)));
-        assert_eq!(c().apply("<local-command-stdout>Goal set</local-command-stdout>"), Err(Drop::Tag(1)));
-        assert_eq!(c().apply("<task-notifications-are-not-this>"), Ok(Cow::Borrowed("<task-notifications-are-not-this>")));
+        assert_eq!(
+            c().apply("<local-command-stdout>Goal set</local-command-stdout>"),
+            Err(Drop::Tag(1))
+        );
+        assert_eq!(
+            c().apply("<task-notifications-are-not-this>"),
+            Ok(Cow::Borrowed("<task-notifications-are-not-this>"))
+        );
         assert_eq!(c().apply("Stop hook feedback: [x]"), Err(Drop::Prefix(0)));
         assert_eq!(c().label(&Drop::Tag(0)), "tag <task-notification>");
         assert_eq!(c().apply("\u{200E}"), Err(Drop::Invisible));

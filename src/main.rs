@@ -5,18 +5,14 @@
 //!   relic-extract run         relic-scan months -> OUT/<stream>/YYYY-MM.parquet (only what changed)
 //!   relic-extract status      per stream: months cut, chunks, distinct texts, newest ts
 
-mod analyse;
-mod clean;
-mod config;
-mod extract;
-mod json;
-mod read;
-mod run;
-
 use clap::{Parser, Subcommand};
+use relic_extract::{analyse, config, extract, run};
 
 #[derive(Parser)]
-#[command(version, about = "relic-scan month files -> per-stream, deduped, chunked parts for embedding")]
+#[command(
+    version,
+    about = "relic-scan month files -> per-stream, deduped, chunked parts for embedding"
+)]
 struct Cli {
     /// another config (default ~/.arra/relic.toml, or ARRA_CONFIG)
     #[arg(long, global = true)]
@@ -87,34 +83,73 @@ fn main() {
     match cli.cmd {
         Cmd::Init => unreachable!(),
         Cmd::Config => {
-            println!("# {}{}", cfg.path.display(), if cfg.existed { "" } else { "  (missing: defaults; relic-extract init writes it)" });
+            println!(
+                "# {}{}",
+                cfg.path.display(),
+                if cfg.existed {
+                    ""
+                } else {
+                    "  (missing: defaults; relic-extract init writes it)"
+                }
+            );
             println!("{}", run::pretty(&cfg.v));
         }
-        Cmd::Run { months, stream, force, raw } => {
+        Cmd::Run {
+            months,
+            stream,
+            force,
+            raw,
+        } => {
             if raw {
                 cfg.raw();
             }
             let t0 = std::time::Instant::now();
-            eprintln!("relic-extract: {} -> {} · config {}{}", cfg.source(), cfg.out(), cfg.path.display(),
-                      if cfg.existed { "" } else { " (defaults)" });
+            eprintln!(
+                "relic-extract: {} -> {} · config {}{}",
+                cfg.source(),
+                cfg.out(),
+                cfg.path.display(),
+                if cfg.existed { "" } else { " (defaults)" }
+            );
             let months = months.map(|m| m.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect());
             let done = run::run(&cfg, months, force, stream.as_deref()).unwrap_or_else(|e| fail(e));
             let (chunks, dropped): (usize, usize) = done.iter().fold((0, 0), |a, d| (a.0 + d.chunks, a.1 + d.dropped));
-            eprintln!("{} part(s) cut in {:.1}s · {} chunks · {} messages cleaned out", done.len(), t0.elapsed().as_secs_f64(),
-                      extract::num(chunks), extract::num(dropped));
+            eprintln!(
+                "{} part(s) cut in {:.1}s · {} chunks · {} messages cleaned out",
+                done.len(),
+                t0.elapsed().as_secs_f64(),
+                extract::num(chunks),
+                extract::num(dropped)
+            );
         }
         Cmd::Status => run::status(&cfg),
-        Cmd::Analyse { months, stream, what_if, samples, top } => {
+        Cmd::Analyse {
+            months,
+            stream,
+            what_if,
+            samples,
+            top,
+        } => {
             if !config::STREAMS.contains(&stream.as_str()) {
                 fail(format!("unknown stream {stream} (known: {})", config::STREAMS.join(", ")));
             }
             let alt = (!what_if.is_empty()).then(|| {
                 let mut v = cfg.v.clone();
-                let sets: Vec<String> = what_if.iter().map(|kv| {
-                    let path = config::set(&mut v, &stream, kv).unwrap_or_else(|e| fail(e));
-                    format!("{path} = {}", kv.split_once('=').map_or("", |x| x.1).trim())
-                }).collect();
-                (config::Config { v, path: cfg.path.clone(), existed: cfg.existed }, sets)
+                let sets: Vec<String> = what_if
+                    .iter()
+                    .map(|kv| {
+                        let path = config::set(&mut v, &stream, kv).unwrap_or_else(|e| fail(e));
+                        format!("{path} = {}", kv.split_once('=').map_or("", |x| x.1).trim())
+                    })
+                    .collect();
+                (
+                    config::Config {
+                        v,
+                        path: cfg.path.clone(),
+                        existed: cfg.existed,
+                    },
+                    sets,
+                )
             });
             let months = months.map(|m| m.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect());
             analyse::analyse(&cfg, alt.as_ref().map(|(c, s)| (c, s.clone())), months, &stream, samples, top)
