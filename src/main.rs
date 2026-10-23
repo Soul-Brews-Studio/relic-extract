@@ -41,6 +41,9 @@ enum Cmd {
         /// the Python reference's cut: every role, no clean step, main-tier sessions (for `just parity`)
         #[arg(long)]
         raw: bool,
+        /// do not run the [extract] after command
+        #[arg(long)]
+        no_after: bool,
     },
     /// Per stream: months, chunks, distinct texts, newest message
     Status,
@@ -111,6 +114,7 @@ fn main() {
             stream,
             force,
             raw,
+            no_after,
         } => {
             if raw {
                 cfg.raw();
@@ -133,6 +137,9 @@ fn main() {
                 extract::num(chunks),
                 extract::num(dropped)
             );
+            if !no_after {
+                run::after(&cfg, &done).unwrap_or_else(|e| fail(e));
+            }
         }
         Cmd::Status => run::status(&cfg),
         Cmd::Tui { months, stream, what_if } => {

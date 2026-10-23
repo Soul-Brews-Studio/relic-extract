@@ -101,6 +101,19 @@ kinds = ["call"]                # add "result" for tool outputs
 max_chars = 2000                # a tool body is cut here, not chunked
 ```
 
+### After a run: the `after` hook
+
+```toml
+[extract]
+after = "bin/relic5-push && ssh white '~/relic5/app/.venv/bin/relic5 index'"
+```
+
+Runs through `sh -c` once a run that cut at least one part has finished and released `OUT/.lock` (so a push that
+takes the lock does not wait). Its env: `RELIC_EXTRACT_CUT` (the parts, comma separated, relative to OUT, e.g.
+`text/2026-10.parquet,tools/2026-10.parquet`) and `RELIC_EXTRACT_OUT`. A failing command fails the run.
+`relic-extract run --no-after` skips it. Every stream's `_extract.json` is written last and its `at` changes
+every run: a watcher can use that as the finished marker instead.
+
 ## Output
 
 `~/.relic-extract/<stream>/YYYY-MM.parquet`, one row per chunk:
