@@ -145,3 +145,21 @@
     }
   }
 }
+
+// ask the index: example questions answered by the fused search (asks.py)
+if (DATA.asks && DATA.asks.asks.length) {
+  section(t("ask.h"), t("ask.lead"), (s) => {
+    DATA.asks.asks.forEach((a) => {
+      h("h3", null, "“" + a.q + "”", s);
+      const tb = h("tbody", null, null, h("table", "topics", null, s));
+      a.hits.forEach((x) => {
+        const r = h("tr", null, null, tb);
+        h("td", null, (x.both ? "= " : "") + t(x.stream), r);
+        const c = h("td", null, null, r);
+        h("span", null, x.text, c);
+        h("div", "ex", `${x.ts} · ${x.who} · ${x.repo} · msgkey ${x.msgkey}`, c);
+      });
+    });
+    h("pre", null, 'just search "your question" -n 15 --stream text,thinking,tools --month 2026-10', s).tabIndex = 0;
+  }, t("ask.note"));
+}

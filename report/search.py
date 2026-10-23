@@ -45,6 +45,40 @@ def q(v):
     return "'" + str(v).replace("'", "''") + "'"
 
 
+def search(query, n=15, streams=("text", "thinking", "tools"), month=None, repo=None, role=None, mode="both", tabs=None, enc=None):
+    """Fused hits for one query: [{stream, msgkey, ts_th, role, name, cat, text, score, lanes}, ...]."""
+    tabs = {k: v for k, v in (tabs or tables()).items() if k in streams}
+    conds = ["probe = false"] + [f"{c} = {q(v)}" for c, v in (("month", month), ("cat", repo), ("role", role)) if v]
+    where = " AND ".join(conds)
+    qv = (enc or encode)(query) if mode != "icu" else None
+    fused, lanes = {}, {}
+    for stream, tb in tabs.items():
+        cols = [c for c in COLS if c in tb.schema.names]
+        for lane in (("icu", "vector") if mode == "both" else (mode,)):
+            try:
+                qb = tb.search(query, query_type="fts") if lane == "icu" else tb.search(qv)
+                rows = qb.where(where, prefilter=True).limit(n * 4).select(cols + ["_score" if lane == "icu" else "_distance"]).to_list()
+            except Exception as ex:
+                print(f"  {stream}/{lane}: {ex.__class__.__name__}: {str(ex)[:120]}")
+                continue
+            seen, rank = set(), 0
+            for r in rows:
+                if r["msgkey"] in seen:
+                    continue
+                seen.add(r["msgkey"])
+                rank += 1
+                hit = fused.setdefault((stream, r["msgkey"]), dict(r, stream=stream, score=0.0, lanes=[]))
+                hit["score"] += 1 / (60 + rank)
+                hit["lanes"].append(f"{lane}#{rank}")
+                lanes[(stream, lane)] = lanes.get((stream, lane), 0) + 1
+    hits = sorted(fused.values(), key=lambda h: -h["score"])[:n]
+    for h in hits:
+        h.pop("_score", None)
+        h.pop("_distance", None)
+        h["both"] = len({x.split("#")[0] for x in h["lanes"]}) == 2
+    return hits, lanes
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("query")
@@ -57,41 +91,15 @@ def main():
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
     t0 = time.time()
-    tabs = {k: v for k, v in tables().items() if k in a.stream.split(",")}
-    conds = ["probe = false"] + [f"{c} = {q(v)}" for c, v in (("month", a.month), ("cat", a.repo), ("role", a.role)) if v]
-    where = " AND ".join(conds)
-    qv = encode(a.query) if a.mode != "icu" else None
-    fused, lanes = {}, {}
-    for stream, tb in tabs.items():
-        cols = [c for c in COLS if c in tb.schema.names]
-        for lane in (("icu", "vector") if a.mode == "both" else (a.mode,)):
-            try:
-                qb = tb.search(a.query, query_type="fts") if lane == "icu" else tb.search(qv)
-                rows = qb.where(where, prefilter=True).limit(a.n * 4).select(cols + ["_score" if lane == "icu" else "_distance"]).to_list()
-            except Exception as ex:
-                print(f"  {stream}/{lane}: {ex.__class__.__name__}: {str(ex)[:120]}")
-                continue
-            seen = set()
-            rank = 0
-            for r in rows:
-                if r["msgkey"] in seen:
-                    continue
-                seen.add(r["msgkey"])
-                rank += 1
-                k = (stream, r["msgkey"])
-                hit = fused.setdefault(k, dict(r, stream=stream, score=0.0, lanes=[]))
-                hit["score"] += 1 / (60 + rank)
-                hit["lanes"].append(f"{lane}#{rank}")
-                lanes[(stream, lane)] = lanes.get((stream, lane), 0) + 1
-    hits = sorted(fused.values(), key=lambda h: -h["score"])[: a.n]
+    hits, lanes = search(a.query, a.n, tuple(a.stream.split(",")), a.month, a.repo, a.role, a.mode)
     if a.json:
         print(json.dumps(dict(q=a.query, took_ms=int((time.time() - t0) * 1000), hits=[
-            {k: v for k, v in h.items() if k != "vector"} for h in hits]), ensure_ascii=False, indent=1))
+            {k: v for k, v in h.items() if k != "vector"} for h in hits]), ensure_ascii=False, indent=1, default=str))
         return
     print(f"{int((time.time() - t0) * 1000)} ms · {', '.join(f'{s}/{l} {n}' for (s, l), n in lanes.items())} · "
           f"'=' both lanes · read one: RELIC4_ROOT={ROOT} relic4 show <msgkey>")
     for h in hits:
-        both = "=" if len({x.split('#')[0] for x in h["lanes"]}) == 2 else " "
+        both = "=" if h["both"] else " "
         who = h.get("name") or h.get("role") or ""
         text = " ".join((h.get("text") or "").split())[:130]
         print(f"{both} {h['score']:.4f}  {h['stream']:<8} {h.get('ts_th', '')[:16]}  {who[:10]:<10} {str(h.get('cat'))[:22]:<22} "

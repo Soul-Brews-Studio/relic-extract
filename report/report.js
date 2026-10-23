@@ -21,7 +21,7 @@ document.getElementById("intro").textContent = t("intro");
 document.getElementById("footer").textContent = t("footer");
 document.title = "Relic · " + t("title");
 document.getElementById("built").textContent = t("built", { built: M.built, from: months[0], to: months[last],
-  view: t(M.public ? "view.public" : "view.private") });
+  view: t(M.public ? "view.public" : M.view === "share" ? "view.share" : "view.private") });
 {
   const b = document.getElementById("lang");
   b.textContent = t("lang.button");

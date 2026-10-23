@@ -245,14 +245,37 @@ def page(data):
     return html.replace("/*CSS*/", css).replace("/*JS*/", js).replace("/*DATA*/null", blob)
 
 
+def share(data):
+    """The share view: keep every number, chart and hand-given name; drop every quoted passage and every
+    machine-picked word (a c-TF-IDF word can be a token, a password-like string or a person's handle)."""
+    data["meta"]["view"] = "share"
+    data.pop("asks", None)
+    for t in (data.get("topics") or {}).get("topics", []):
+        t.pop("examples", None)
+        t["terms"] = [t.get("name") or f"topic {t['id']}"]
+    v = data.get("vspace")
+    if v:
+        v["lessons"] = {}
+    f = data.get("focus")
+    if f:
+        for fam in f["families"].values():
+            fam["lessons"] = []
+            for r in fam["repos"]:
+                r["started"], r["now"] = [], []
+            for ft in fam["features"]:
+                ft["examples"] = []
+                ft["terms"] = [ft.get("name") or f"feature {ft['id']}"]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scan", default=str(HOME / ".relic-scan"))
     ap.add_argument("--extract", default=str(HOME / ".relic-extract"))
     ap.add_argument("--out", default=None)
     ap.add_argument("--public", action="store_true", help="counts only: no repository or skill names")
+    ap.add_argument("--share", action="store_true", help="every chart and name, no quoted text: for publishing")
     a = ap.parse_args()
-    out = Path(a.out or Path(a.extract) / ("report-public" if a.public else "report")).expanduser()
+    out = Path(a.out or Path(a.extract) / ("report-public" if a.public else "report-share" if a.share else "report")).expanduser()
     out.mkdir(parents=True, exist_ok=True)
     data = build(Path(a.scan).expanduser(), Path(a.extract).expanduser(), a.public)
     vp = Path(a.extract).expanduser() / "report" / "vspace.json"
@@ -262,6 +285,9 @@ def main():
             v = {"months": v["months"], "growth": v["growth"], "ship": v["ship"], "friction": v["friction"],
                  "works": {"by_month": v["works"]["by_month"], "shipped": v["works"]["shipped"], "by_topic": [], "by_oracle": [], "flows": []}}
         data["vspace"] = v
+    ap_ = Path(a.extract).expanduser() / "report" / "asks.json"
+    if ap_.exists() and not a.public:  # asks.py's output: quoted passages, so the private view only
+        data["asks"] = json.loads(ap_.read_text())
     fp = Path(a.extract).expanduser() / "report" / "focus.json"
     if fp.exists():  # focus.py's output; the public view keeps only the monthly split by family
         f = json.loads(fp.read_text())
@@ -273,6 +299,8 @@ def main():
             for t in data["topics"]["topics"]:  # words can name a repository: only hand-given names stay
                 t.pop("examples", None)
                 t["terms"] = [t.get("name") or f"topic {t['id']}"]
+    if a.share:
+        share(data)
     (out / "report.json").write_text(json.dumps(data, ensure_ascii=False, indent=1))
     n = tidy(data, out)
     (out / "index.html").write_text(page(data))

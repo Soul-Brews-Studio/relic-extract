@@ -128,23 +128,29 @@ section.card { scroll-margin-top: 16px; }
 .findings a { font-weight: 600; text-decoration: none; }
 .findings a:hover { text-decoration: underline; }
 .findings span { color: var(--ink-2); }
-.dots { position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 5; display: flex; flex-direction: column;
-  align-items: center; gap: max(2px, min(6px, calc((100vh - 120px) / 60 - 8px))); padding: 8px 4px; }
-.wp { position: relative; display: block; width: 8px; height: 8px; border-radius: 50%; background: var(--base);
-  transition: transform 0.15s, background 0.15s; outline-offset: 3px; }
-.wp-m { width: 6px; height: 6px; }
-.wp-p { width: 10px; height: 10px; background: none; border: 2px solid var(--base); margin-top: 8px; }
-.wp::after { content: ""; position: absolute; inset: -6px -10px; }  /* a hit area bigger than the dot */
-.wp:hover, .wp:focus-visible { transform: scale(1.5); background: var(--ink-2); }
-.wp-p:hover, .wp-p:focus-visible { background: none; border-color: var(--ink-2); }
-.wp[aria-current="true"] { background: var(--s4); transform: scale(1.4); }
-.wp-p[aria-current="true"] { background: none; border-color: var(--s4); }
-.wp-l { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 12px;
-  color: var(--ink); background: var(--surface); border: 1px solid var(--ring); border-radius: 6px; padding: 3px 8px;
-  opacity: 0; pointer-events: none; transition: opacity 0.12s; }
-.wp:hover .wp-l, .wp:focus-visible .wp-l { opacity: 1; }
+.map { position: fixed; top: 16px; right: 16px; width: 220px; max-height: calc(100vh - 96px); display: flex; flex-direction: column;
+  gap: 1px; font-size: 12px; z-index: 5; }
+.map a { color: var(--muted); text-decoration: none; padding: 2px 8px; border-left: 2px solid var(--grid); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; line-height: 1.4; transition: color 0.12s, border-color 0.12s; }
+.map a:hover { color: var(--ink); }
+.map a[aria-current="true"] { color: var(--ink); border-left-color: var(--s4); }
+.map a.map-p { color: var(--ink-2); font-weight: 600; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; margin-top: 8px; border-left-color: transparent; }
+.map-g { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-top: 2px; }
+.map-g a { font-variant-numeric: tabular-nums; font-size: 11px; padding: 2px 6px; }
+.map-btn { display: none; position: fixed; left: 16px; bottom: 16px; z-index: 6; font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--ring); border-radius: 999px; padding: 10px 16px; min-height: 44px; cursor: pointer; }
+@media (max-width: 1320px) {
+  .map { display: none; top: auto; bottom: 72px; left: 16px; right: auto; background: var(--surface); border: 1px solid var(--ring);
+    border-radius: 12px; padding: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); }
+  .map.open { display: flex; }
+  .map-btn { display: block; }
+}
 @keyframes arrive { from { box-shadow: 0 0 0 2px var(--s4); } to { box-shadow: 0 0 0 2px transparent; } }
 .card.arrive { animation: arrive 1.2s ease-out; }
-@media (prefers-reduced-motion: reduce) { .wp, .wp-l { transition: none; } .card.arrive { animation: none; } }
-@media (max-width: 1000px) { .dots { display: none; } }
-.dots { max-height: 80vh; }
+@media (prefers-reduced-motion: reduce) { .map a { transition: none; } .card.arrive { animation: none; } }
+.pres { position: fixed; right: 40px; bottom: 16px; z-index: 6; display: flex; gap: 8px; }
+.pres-b { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--ring); border-radius: 999px;
+  padding: 10px 16px; min-height: 44px; cursor: pointer; max-width: 46vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pres-n { color: var(--surface); background: var(--ink); border-color: var(--ink); }
+.pres-b:disabled { opacity: 0.4; cursor: default; }
+@media (max-width: 1000px) { .pres { right: 16px; } }
