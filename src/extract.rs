@@ -167,6 +167,7 @@ pub struct Pick {
 }
 
 pub struct Done {
+    pub part: String, // <stream>/YYYY-MM.parquet, relative to OUT
     pub dropped: usize,
     pub messages: usize,
     pub chunks: usize,
@@ -338,6 +339,7 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path, 
     let batch = RecordBatch::try_new(schema.clone(), cols).map_err(|e| e.to_string())?;
     write_atomic(out, schema, &batch)?;
     let d = Done {
+        part: format!("{name}/{month}.parquet"),
         messages: msgs,
         chunks: n,
         distinct: keys.len(),

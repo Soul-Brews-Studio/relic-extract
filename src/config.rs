@@ -23,6 +23,8 @@ source = "~/.relic-scan"        # relic-scan's output: YYYY-MM.parquet + meta/se
 out = "~/.relic-extract"        # <stream>/YYYY-MM.parquet, ready for relic-embed
 months = "changed"              # "changed" | "all" | ["2026-10", "2026-09"]
 sessions = "any"                # cat/probe from meta/sessions.parquet: "any" tier (main preferred) | "main" only
+after = ""                      # a shell command run after a run that cut parts, once the lock is released;
+                                # its env: RELIC_EXTRACT_CUT="text/2026-10.parquet,…", RELIC_EXTRACT_OUT=<out>
 
 [extract.dedupe]
 key = "content"                 # "content": the same message rewritten with other bytes is embedded once
@@ -109,6 +111,7 @@ fn defaults() -> Value {
         "dedupe": {"key": "content"},
         "chunk": {"max_chars": 6000, "overlap": 400},
         "sessions": "any",
+        "after": "",
         "streams": {
             "text": {"enabled": true, "field": "text", "roles": ["user", "assistant"], "clean": clean_defaults()},
             "thinking": {"enabled": false, "field": "text", "roles": ["thinking"]},
@@ -184,6 +187,11 @@ impl Config {
     pub fn content_dedupe(&self) -> bool {
         self.v["dedupe"]["key"] == "content"
     }
+    /// The command `[extract] after` names, if any.
+    pub fn after(&self) -> Option<&str> {
+        self.v["after"].as_str().map(str::trim).filter(|s| !s.is_empty())
+    }
+
     pub fn max_chars(&self) -> usize {
         self.v["chunk"]["max_chars"].as_u64().unwrap_or(6000) as usize
     }

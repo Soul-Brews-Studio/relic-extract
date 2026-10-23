@@ -16,8 +16,19 @@ function dayList(month, parent) {
     h("strong", null, d.day.slice(8), c0);
     h("div", "ex", t("days").split(",")[(new Date(d.day + "T12:00:00").getDay() + 6) % 7], c0);
     const c = h("td", null, null, r);
-    const sum = d.summary && (d.summary[LANG] || d.summary.en);
+    const S_ = d.summary || {};
+    const sum = S_[LANG] || S_.en;
+    if (S_.type || S_.focus) {
+      const top = h("div", null, null, c);
+      if (S_.type) h("span", "dtype", t("day.type." + S_.type), top);
+      if (S_.focus) h("strong", null, " " + S_.focus, top);
+    }
     if (sum) h("div", null, sum, c);
+    const extra = [["day.distraction", S_.distraction], ["day.agents", S_.agents], ["day.pattern", S_.pattern],
+      ["day.work", Array.isArray(S_.work) ? S_.work.join(" · ") : S_.work]].filter(([, v]) => v && v !== "none");
+    if (extra.length) h("div", "ex", extra.map(([k, v]) => t(k) + " " + v).join("  ·  "), c);
+    if (d.shape) h("div", "ex", t("day.shape", { n: d.shape.projects, top: d.shape.top_project || "–", s: fmtP(d.shape.top_share || 0),
+      sw: d.shape.project_switches, l: d.shape.loop_prompts }), c);
     h("div", "ex", t("day.row", { p: fmtN(d.prompts_main || 0), a: fmtN(d.prompts_agent || 0), c: fmtN(d.tool_calls || 0),
       e: fmtN(d.tool_errors || 0), hrs: (d.hours || []).length }) + (d.topics && d.topics.length ? " · " + d.topics.slice(0, 3).map((x) => x[0]).join(" · ") : "")
       + (d.repos && d.repos.length ? " · " + d.repos.slice(0, 2).map((x) => x[0]).join(", ") : ""), c);

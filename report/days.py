@@ -125,7 +125,7 @@ def day_input(con, d):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-llm", action="store_true")
-    ap.add_argument("--model", default="typhoon2.1-gemma3-12b")
+    ap.add_argument("--model", default="qwen3:14b")
     ap.add_argument("--host", default="gb300")
     ap.add_argument("--only", default="", help="comma-separated days (for comparing models)")
     a = ap.parse_args()

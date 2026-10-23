@@ -161,3 +161,5 @@ canvas.semmap { display: block; width: 100%; height: auto; background: var(--sur
 .cw.th { color: var(--s2); }
 .chart.cal { margin: 4px 0; }
 table.days td:first-child { width: 48px; }
+.dtype { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink-2);
+  border: 1px solid var(--ring); border-radius: 999px; padding: 1px 8px; margin-right: 4px; }
