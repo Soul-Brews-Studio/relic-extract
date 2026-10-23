@@ -1,0 +1,240 @@
+//! The clean step: what a message's text becomes before it is cut, for a stream with `[extract.streams.<s>.clean]`.
+//!
+//!   1. strip_tags      remove <tag>…</tag> blocks anywhere (an unclosed one runs to the end)
+//!   2. commands        a slash-command wrapper (<command-name>/x … <command-args>a</command-args>):
+//!                      "args" -> "/x a" (dropped when there are no args) · "drop" · "keep" as it is
+//!   3. trim            whitespace and zero-width characters at both ends
+//!   4. drop            empty · no visible character (drop_invisible) · starts with <tag of drop_tags ·
+//!                      starts with one of drop_prefixes · fewer than min_chars characters
+//!   5. redact          secrets relic-scan's 10 rules miss: WireGuard keys, Telegram bot tokens, Discord webhooks
+//!                      and bot tokens, written as [kind:abcd…N] like relic-scan does
+//!
+//! msgkey stays on the raw row (relic4 finds the message by it); key is the blake2b of the cleaned chunk.
+//! Measured on m5 (docs/SCAN-INPUT.md): about 18 % of text chunks are harness text.
+
+use std::borrow::Cow;
+
+use regex::Regex;
+use serde_json::Value;
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Commands {
+    Args,
+    Drop,
+    Keep,
+}
+
+/// Why a message was dropped, for the run's log.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+pub enum Drop {
+    Empty,
+    Invisible,
+    Tag,
+    Prefix,
+    Command,
+    Short,
+}
+
+pub struct Clean {
+    strip: Vec<Regex>,
+    commands: Commands,
+    drop_tags: Vec<String>,
+    drop_prefixes: Vec<String>,
+    drop_invisible: bool,
+    min_chars: usize,
+    redact: bool,
+}
+
+fn strs(v: &Value) -> Vec<String> {
+    v.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default()
+}
+
+fn invisible(c: char) -> bool {
+    c.is_whitespace() || matches!(c, '\u{200B}'..='\u{200F}' | '\u{2060}' | '\u{FEFF}' | '\u{00AD}' | '\u{180E}')
+}
+
+struct Rule {
+    kind: &'static str,
+    rx: Regex,
+    group: usize,
+}
+
+fn rules() -> &'static Vec<Rule> {
+    static R: std::sync::OnceLock<Vec<Rule>> = std::sync::OnceLock::new();
+    R.get_or_init(|| {
+        let r = |p: &str| Regex::new(p).expect("redact rule");
+        vec![
+            Rule { kind: "wireguard-key", rx: r(r"(?i)\bPrivateKey\s*=\s*([A-Za-z0-9+/]{42,43}=)"), group: 1 },
+            Rule { kind: "telegram-token", rx: r(r"\b([0-9]{8,10}:AA[A-Za-z0-9_-]{33})\b"), group: 1 },
+            Rule { kind: "discord-webhook", rx: r(r"discord(?:app)?\.com/api/webhooks/[0-9]+/([A-Za-z0-9_-]{50,})"), group: 1 },
+            Rule { kind: "discord-token", rx: r(r"\b([MN][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38})\b"), group: 1 },
+        ]
+    })
+}
+
+/// The extra redaction: each secret becomes [kind:first4…len].
+pub fn redact(s: &str) -> Cow<'_, str> {
+    let mut cur: Cow<str> = Cow::Borrowed(s);
+    for rule in rules() {
+        if !rule.rx.is_match(&cur) {
+            continue;
+        }
+        let mut out = String::with_capacity(cur.len());
+        let mut last = 0;
+        for caps in rule.rx.captures_iter(&cur) {
+            let m = caps.get(rule.group).unwrap();
+            out.push_str(&cur[last..m.start()]);
+            let v = m.as_str();
+            let head: String = v.chars().take(4).collect();
+            out.push_str(&format!("[{}:{}…{}]", rule.kind, head, v.chars().count()));
+            last = m.end();
+        }
+        out.push_str(&cur[last..]);
+        cur = Cow::Owned(out);
+    }
+    cur
+}
+
+fn tag_body<'a>(s: &'a str, tag: &str) -> Option<&'a str> {
+    let open = format!("<{tag}>");
+    let a = s.find(&open)? + open.len();
+    let z = s[a..].find(&format!("</{tag}>")).map_or(s.len(), |z| a + z);
+    Some(s[a..z].trim())
+}
+
+impl Clean {
+    /// The stream's clean settings, or None when it has none or `enabled = false`.
+    pub fn from(st: &Value) -> Option<Clean> {
+        let c = &st["clean"];
+        if c["enabled"] != true {
+            return None;
+        }
+        let strip = strs(&c["strip_tags"]).iter()
+            .map(|t| Regex::new(&format!(r"(?s)<{0}>.*?(?:</{0}>|\z)", regex::escape(t))).expect("tag"))
+            .collect();
+        let commands = match c["commands"].as_str() {
+            Some("drop") => Commands::Drop,
+            Some("keep") => Commands::Keep,
+            _ => Commands::Args,
+        };
+        Some(Clean {
+            strip, commands, drop_tags: strs(&c["drop_tags"]), drop_prefixes: strs(&c["drop_prefixes"]),
+            drop_invisible: c["drop_invisible"] != false, min_chars: c["min_chars"].as_u64().unwrap_or(0) as usize,
+            redact: c["redact"] != false,
+        })
+    }
+
+    /// The text to cut, or why the message is dropped.
+    pub fn apply<'a>(&self, raw: &'a str) -> Result<Cow<'a, str>, Drop> {
+        let mut s: Cow<str> = Cow::Borrowed(raw);
+        for rx in &self.strip {
+            if rx.is_match(&s) {
+                s = Cow::Owned(rx.replace_all(&s, "").into_owned());
+            }
+        }
+        let head = s.trim_start_matches(invisible);
+        if head.starts_with("<command-message>") || head.starts_with("<command-name>") {
+            match self.commands {
+                Commands::Drop => return Err(Drop::Command),
+                Commands::Keep => {}
+                Commands::Args => {
+                    let name = tag_body(head, "command-name").unwrap_or("");
+                    let args = tag_body(head, "command-args").unwrap_or("");
+                    if args.is_empty() {
+                        return Err(Drop::Command);
+                    }
+                    s = Cow::Owned(format!("{name} {args}").trim().to_string());
+                }
+            }
+        }
+        let t = s.trim_matches(invisible);
+        if t.is_empty() {
+            return Err(if raw.trim().is_empty() { Drop::Empty } else if self.drop_invisible { Drop::Invisible } else { Drop::Empty });
+        }
+        if self.drop_tags.iter().any(|g| {
+            t.strip_prefix('<').and_then(|r| r.strip_prefix(g.as_str()))
+                .is_some_and(|r| r.starts_with('>') || r.starts_with(char::is_whitespace))
+        }) {
+            return Err(Drop::Tag);
+        }
+        if self.drop_prefixes.iter().any(|p| t.starts_with(p.as_str())) {
+            return Err(Drop::Prefix);
+        }
+        if self.min_chars > 0 && t.chars().count() < self.min_chars {
+            return Err(Drop::Short);
+        }
+        let t = if t.len() == s.len() { s } else { Cow::Owned(t.to_string()) };
+        Ok(if self.redact {
+            match redact(&t) {
+                Cow::Borrowed(_) => t,
+                Cow::Owned(o) => Cow::Owned(o),
+            }
+        } else {
+            t
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn c() -> Clean {
+        Clean::from(&json!({"clean": {"enabled": true, "strip_tags": ["system-reminder"], "commands": "args",
+            "drop_tags": ["task-notification", "local-command-stdout"], "drop_prefixes": ["Stop hook feedback:"],
+            "min_chars": 0}})).unwrap()
+    }
+
+    #[test]
+    fn strips_reminders_and_keeps_the_human() {
+        let t = "<system-reminder>\nrules\n</system-reminder>\nfix the bug please";
+        assert_eq!(c().apply(t).unwrap(), "fix the bug please");
+        assert_eq!(c().apply("<system-reminder>only</system-reminder>"), Err(Drop::Invisible));
+        assert_eq!(c().apply("hi <system-reminder>never closed"), Ok(Cow::Borrowed("hi")));
+    }
+
+    #[test]
+    fn commands_keep_their_args() {
+        let t = "<command-message>goal</command-message>\n<command-name>/goal</command-name>\n<command-args>full analyse</command-args>";
+        assert_eq!(c().apply(t).unwrap(), "/goal full analyse");
+        assert_eq!(c().apply("<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args></command-args>"),
+                   Err(Drop::Command));
+    }
+
+    #[test]
+    fn drops_harness_turns() {
+        assert_eq!(c().apply("<task-notification>\n<task-id>x</task-id>"), Err(Drop::Tag));
+        assert_eq!(c().apply("<local-command-stdout>Goal set</local-command-stdout>"), Err(Drop::Tag));
+        assert_eq!(c().apply("<task-notifications-are-not-this>"), Ok(Cow::Borrowed("<task-notifications-are-not-this>")));
+        assert_eq!(c().apply("Stop hook feedback: [x]"), Err(Drop::Prefix));
+        assert_eq!(c().apply("\u{200E}"), Err(Drop::Invisible));
+        assert_eq!(c().apply("\u{200B} \n"), Err(Drop::Invisible));
+        assert_eq!(c().apply("ทำต่อ"), Ok(Cow::Borrowed("ทำต่อ")));
+    }
+
+    #[test]
+    fn min_chars_counts_characters() {
+        let mut k = c();
+        k.min_chars = 5;
+        assert_eq!(k.apply("ทำต่อ").unwrap(), "ทำต่อ"); // 5 characters, 15 bytes
+        assert_eq!(k.apply("ok"), Err(Drop::Short));
+    }
+
+    #[test]
+    fn redacts_what_relic_scan_misses() {
+        let wg = format!("[Interface]\nPrivateKey = {}=\n", "A".repeat(43));
+        assert_eq!(redact(&wg), "[Interface]\nPrivateKey = [wireguard-key:AAAA…44]\n");
+        let tg = format!("bot {}:AA{} ok", "123456789", "b".repeat(33));
+        assert_eq!(redact(&tg), "bot [telegram-token:1234…45] ok");
+        let wh = format!("https://discord.com/api/webhooks/123/{}", "x".repeat(60));
+        assert_eq!(redact(&wh), "https://discord.com/api/webhooks/123/[discord-webhook:xxxx…60]");
+        assert_eq!(redact("nothing here"), "nothing here");
+    }
+
+    #[test]
+    fn off_unless_enabled() {
+        assert!(Clean::from(&json!({})).is_none());
+        assert!(Clean::from(&json!({"clean": {"enabled": false}})).is_none());
+    }
+}

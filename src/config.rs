@@ -16,12 +16,13 @@ use serde_json::{Map, Value, json};
 
 pub const STREAMS: [&str; 3] = ["text", "thinking", "tools"];
 
-pub const TEMPLATE: &str = r#"# ~/.arra/relic.toml — the relic chain: scan -> extract -> embed. Each tool reads its own table.
+pub const TEMPLATE: &str = r##"# ~/.arra/relic.toml — the relic chain: scan -> extract -> embed. Each tool reads its own table.
 
 [extract]
 source = "~/.relic-scan"        # relic-scan's output: YYYY-MM.parquet + meta/sessions.parquet
 out = "~/.relic-extract"        # <stream>/YYYY-MM.parquet, ready for relic-embed
 months = "changed"              # "changed" | "all" | ["2026-10", "2026-09"]
+sessions = "any"                # cat/probe from meta/sessions.parquet: "any" tier (main preferred) | "main" only
 
 [extract.dedupe]
 key = "content"                 # "content": the same message rewritten with other bytes is embedded once
@@ -34,10 +35,26 @@ overlap = 400
 [extract.streams.text]
 enabled = true
 field = "text"
+roles = ["user", "assistant"]   # [] = every role
+
+[extract.streams.text.clean]     # before cutting; msgkey stays on the raw row, key is on the cleaned chunk
+enabled = true
+strip_tags = ["system-reminder"]                 # <tag>…</tag> removed anywhere
+commands = "args"               # slash commands: "args" -> "/goal <args>" (none: dropped) | "drop" | "keep"
+drop_tags = ["task-notification", "subagent_notification", "goal_context", "hook_prompt", "local-command-stdout",
+             "local-command-stderr", "local-command-caveat", "bash-input", "bash-stdout", "bash-stderr",
+             "environment_context", "user_instructions"]   # a message starting with <tag is dropped
+drop_prefixes = ["Stop hook feedback:", "Base directory for this skill:", "[Request interrupted by user",
+                 "Caveat: The messages below were generated", "# AGENTS.md instructions", "API Error:",
+                 "No response requested."]
+drop_invisible = true           # nothing but whitespace / zero-width characters
+min_chars = 0                   # v3 used 24; 0 = keep short messages
+redact = true                   # WireGuard keys, Telegram / Discord tokens, Discord webhooks -> [kind:abcd…N]
 
 [extract.streams.thinking]
 enabled = false                 # Nat 2026-10-22: "just text no thinking for the embed"
 field = "text"
+roles = ["thinking"]
 
 [extract.streams.tools]
 enabled = false                 # Nat 2026-10-22: "next time we skip tools"
@@ -46,7 +63,24 @@ kinds = ["call"]                # "call" = tool inputs; add "result" for outputs
 max_chars = 2000                # a tool body is cut here, not chunked
 
 # [embed]                       # relic-embed (next): model, gb300 / local runs, output
-"#;
+"##;
+
+fn clean_defaults() -> Value {
+    json!({
+        "enabled": true,
+        "strip_tags": ["system-reminder"],
+        "commands": "args",
+        "drop_tags": ["task-notification", "subagent_notification", "goal_context", "hook_prompt", "local-command-stdout",
+                      "local-command-stderr", "local-command-caveat", "bash-input", "bash-stdout", "bash-stderr",
+                      "environment_context", "user_instructions"],
+        "drop_prefixes": ["Stop hook feedback:", "Base directory for this skill:", "[Request interrupted by user",
+                          "Caveat: The messages below were generated", "# AGENTS.md instructions", "API Error:",
+                          "No response requested."],
+        "drop_invisible": true,
+        "min_chars": 0,
+        "redact": true,
+    })
+}
 
 fn defaults() -> Value {
     json!({"extract": {
@@ -55,9 +89,10 @@ fn defaults() -> Value {
         "months": "changed",
         "dedupe": {"key": "content"},
         "chunk": {"max_chars": 6000, "overlap": 400},
+        "sessions": "any",
         "streams": {
-            "text": {"enabled": true, "field": "text"},
-            "thinking": {"enabled": false, "field": "text"},
+            "text": {"enabled": true, "field": "text", "roles": ["user", "assistant"], "clean": clean_defaults()},
+            "thinking": {"enabled": false, "field": "text", "roles": ["thinking"]},
             "tools": {"enabled": false, "field": "body", "kinds": ["call"], "max_chars": 2000},
         },
     }})
@@ -110,6 +145,17 @@ impl Config {
     pub fn source(&self) -> &str { self.v["source"].as_str().unwrap_or("") }
     pub fn out(&self) -> &str { self.v["out"].as_str().unwrap_or("") }
     pub fn stream(&self, name: &str) -> &Value { &self.v["streams"][name] }
+
+    /// The Python reference's behaviour: every role, no clean step, main-tier sessions (`run --raw`, `just parity`).
+    pub fn raw(&mut self) {
+        for s in STREAMS {
+            if let Some(m) = self.v["streams"][s].as_object_mut() {
+                m.remove("roles");
+                m.remove("clean");
+            }
+        }
+        self.v["sessions"] = Value::String("main".into());
+    }
     pub fn content_dedupe(&self) -> bool { self.v["dedupe"]["key"] == "content" }
     pub fn max_chars(&self) -> usize { self.v["chunk"]["max_chars"].as_u64().unwrap_or(6000) as usize }
     pub fn overlap(&self) -> usize { self.v["chunk"]["overlap"].as_u64().unwrap_or(400) as usize }
@@ -117,7 +163,10 @@ impl Config {
     /// What a part of this stream depends on, besides its source month: change it and every month is cut again.
     /// Same bytes as the Python version (json.dumps sort_keys -> blake2b-8), so its parts stay fresh.
     pub fn stream_hash(&self, name: &str) -> String {
-        let deps = json!({"stream": self.stream(name), "dedupe": self.v["dedupe"], "chunk": self.v["chunk"]});
+        let mut deps = json!({"stream": self.stream(name), "dedupe": self.v["dedupe"], "chunk": self.v["chunk"]});
+        if self.v["sessions"] != "main" {
+            deps["sessions"] = self.v["sessions"].clone(); // "main" hashes as before, so --raw matches the Python version
+        }
         blake2b_simd::Params::new().hash_length(8).hash(crate::json::py_dumps(&deps).as_bytes()).to_hex().to_string()
     }
 }
@@ -155,6 +204,9 @@ pub fn load(given: Option<&str>) -> Result<Config, String> {
     if !(0 <= ov && ov < mc) {
         return Err(format!("{p}: [extract.chunk] needs 0 <= overlap < max_chars"));
     }
+    if !matches!(v["sessions"].as_str(), Some("any" | "main")) {
+        return Err(format!("{p}: [extract] sessions must be \"any\" or \"main\""));
+    }
     match &v["months"] {
         Value::String(s) if s == "changed" || s == "all" => {}
         Value::Array(a) if a.iter().all(Value::is_string) => {}
@@ -189,10 +241,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_text_hash_matches_python() {
+    fn raw_text_hash_matches_python() {
         // ~/.relic-extract/text/_extract.json written by the Python version with the default settings
-        let c = Config { v: defaults()["extract"].clone(), path: PathBuf::new(), existed: false };
+        let mut c = Config { v: defaults()["extract"].clone(), path: PathBuf::new(), existed: false };
+        let cleaned = c.stream_hash("text");
+        c.raw();
         assert_eq!(c.stream_hash("text"), "f4fda3dd0075a191");
+        assert_ne!(cleaned, "f4fda3dd0075a191"); // the clean step's settings re-cut every month
     }
 
     #[test]

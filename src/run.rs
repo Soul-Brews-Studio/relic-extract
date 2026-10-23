@@ -49,7 +49,7 @@ pub fn run(cfg: &Config, months: Option<Vec<String>>, force: bool, only: Option<
         && !config::STREAMS.contains(&s) {
         return Err(format!("unknown stream {s} (known: {})", config::STREAMS.join(", ")));
     }
-    let sess = extract::sessions(cfg.source());
+    let sess = extract::sessions(cfg.source(), cfg.v["sessions"] != "main");
     let mut done = vec![];
     for name in config::STREAMS {
         let st = cfg.stream(name);

@@ -93,19 +93,23 @@ pub fn months_in(source: &str) -> std::collections::BTreeMap<String, std::path::
     out
 }
 
-/// sid -> (cat, probe) from meta/sessions.parquet, main tier only (any_value(cat) = the first non-null, bool_or(probe)).
-pub fn sessions(source: &str) -> HashMap<String, (Option<String>, Option<bool>)> {
-    let mut m: HashMap<String, (Option<String>, Option<bool>)> = HashMap::new();
+pub type Sessions = HashMap<String, (Option<String>, Option<bool>)>;
+
+/// sid -> (cat, probe) from meta/sessions.parquet (any_value(cat) = the first non-null, bool_or(probe)), main tier
+/// first; with `any`, a sid with no main row takes its other-tier rows (omp sub-sessions, a resumed session's file).
+pub fn sessions(source: &str, any: bool) -> Sessions {
+    let (mut m, mut other): (Sessions, Sessions) = Default::default();
     let p = Path::new(source).join("meta").join("sessions.parquet");
     if !p.exists() {
         return m;
     }
     for (sid, tier, cat, probe) in read::sessions(&p) {
-        if tier.as_deref() != Some("main") {
+        let main = tier.as_deref() == Some("main");
+        if !main && !any {
             continue;
         }
-        let Some(sid) = sid else { continue };
-        let e = m.entry(sid).or_default();
+        let Some(sid) = sid.filter(|s| !s.is_empty()) else { continue };
+        let e = if main { m.entry(sid) } else { other.entry(sid) }.or_default();
         if e.0.is_none() {
             e.0 = cat;
         }
@@ -113,6 +117,9 @@ pub fn sessions(source: &str) -> HashMap<String, (Option<String>, Option<bool>)>
             (Some(a), Some(b)) => Some(a || b),
             (a, b) => a.or(b),
         };
+    }
+    for (sid, v) in other {
+        m.entry(sid).or_insert(v);
     }
     m
 }
@@ -125,18 +132,22 @@ struct Pick {
 }
 
 pub struct Done {
+    pub dropped: usize,
     pub messages: usize,
     pub chunks: usize,
     pub distinct: usize,
 }
 
 pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
-                 sess: &HashMap<String, (Option<String>, Option<bool>)>) -> Result<Done, String> {
+                 sess: &Sessions) -> Result<Done, String> {
     let t0 = Instant::now();
     let st = cfg.stream(name);
     let field = st["field"].as_str().unwrap_or("text");
     let kinds: Vec<String> = st["kinds"].as_array().map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect())
         .unwrap_or_else(|| vec!["call".into()]);
+    let roles: Vec<String> = st["roles"].as_array()
+        .map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()).unwrap_or_default();
+    let clean = crate::clean::Clean::from(st);
     let batches = read::month(src, field).map_err(|e| format!("{}: {e}", src.display()))?;
     let content = cfg.content_dedupe();
     // dedupe: one Pick per partition (msgkey, or (h, idx)), the smallest (h, idx) kept
@@ -151,6 +162,9 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
                 continue;
             }
             if name == "tools" && !c.kind.get(i).is_some_and(|k| kinds.iter().any(|x| x == k)) {
+                continue;
+            }
+            if !roles.is_empty() && !c.role.get(i).is_some_and(|r| roles.iter().any(|x| x == r)) {
                 continue;
             }
             let mk = msgkey(c, i);
@@ -177,9 +191,23 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
                                                          BooleanBuilder::new());
     let mut keys = std::collections::HashSet::new();
     let mut n = 0usize;
+    let mut msgs = 0usize;
+    let mut dropped: std::collections::BTreeMap<crate::clean::Drop, usize> = Default::default();
     for p in &kept {
         let (c, i) = (&batches[p.row.0], p.row.1);
-        let body = c.field.get(i).unwrap_or("");
+        let raw = c.field.get(i).unwrap_or("");
+        let body = match &clean {
+            None => std::borrow::Cow::Borrowed(raw),
+            Some(k) => match k.apply(raw) {
+                Ok(t) => t,
+                Err(why) => {
+                    *dropped.entry(why).or_default() += 1;
+                    continue;
+                }
+            },
+        };
+        let body: &str = &body;
+        msgs += 1;
         let pieces = if name == "tools" { vec![clip(body, tool_max)] } else { chunks(body, mc, ov) };
         let sid = c.sid.get(i);
         let (cat, probe) = sid.and_then(|s| sess.get(s)).cloned().unwrap_or((None, None));
@@ -217,9 +245,11 @@ pub fn cut_month(cfg: &Config, name: &str, month: &str, src: &Path, out: &Path,
     let schema = Arc::new(Schema::new(fields));
     let batch = RecordBatch::try_new(schema.clone(), cols).map_err(|e| e.to_string())?;
     write_atomic(out, schema, &batch)?;
-    let d = Done { messages: kept.len(), chunks: n, distinct: keys.len() };
-    eprintln!("extract {name} {month}: {} messages -> {} chunks ({} distinct texts) · {:.1}s", num(d.messages), num(d.chunks),
-              num(d.distinct), t0.elapsed().as_secs_f64());
+    let d = Done { messages: msgs, chunks: n, distinct: keys.len(), dropped: dropped.values().sum() };
+    let why: Vec<String> = dropped.iter().map(|(k, v)| format!("{} {}", format!("{k:?}").to_lowercase(), num(*v))).collect();
+    eprintln!("extract {name} {month}: {} messages -> {} chunks ({} distinct texts){} · {:.1}s", num(d.messages), num(d.chunks),
+              num(d.distinct), if why.is_empty() { String::new() } else { format!(" · cleaned out {}", why.join(", ")) },
+              t0.elapsed().as_secs_f64());
     Ok(d)
 }
 
