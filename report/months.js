@@ -110,6 +110,7 @@
     list(cols, "mm.commands", d.commands);
     list(cols, "mm.tools", d.tools);
     list(cols, "mm.days", d.days);
+    if (typeof dayList === "function") dayList(months[i], body);
   }
 
   months.forEach((m, i) => {
