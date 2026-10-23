@@ -337,11 +337,12 @@ def main():
     if wp.exists() and not a.public:  # work.py's output: repository names and counts
         data["work"] = json.loads(wp.read_text())
     dp = Path(a.extract).expanduser() / "report" / "days.json"
-    if dp.exists():  # days.py's output; the share and public views keep each day's numbers, not its summary
+    if dp.exists():  # days.py's output; the share and public views keep each day's numbers and type, not its sentences
         dd = json.loads(dp.read_text())
         if a.public or a.share:
             for d in dd["days"]:
-                d["summary"] = None
+                ty = (d.get("summary") or {}).get("type")
+                d["summary"] = {"type": ty} if ty in TYPES else None
                 if a.public:
                     d["repos"] = []
         data["days"] = dd

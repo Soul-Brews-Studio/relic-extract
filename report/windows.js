@@ -90,7 +90,47 @@ function winSection() {
         dt: (S.day_types[0] || [])[1], dtn: fmtP(((S.day_types[0] || [])[1] || 0) / S.days),
         bt: fmtP(((S.types[0] || [])[1] || 0) / S.blocks) }), s);
     }
+    winCompare(s);
   }, t("win.note"));
+}
+
+// Every lane side by side, the day readings as one more row: how the type mix and the lead project move as the
+// window shrinks; and where two models read the same windows, how often they give the same type.
+function winCompare(parent) {
+  const L = { ...WIN };
+  if (DATA.days) L["day gb300"] = { unit: "day", host: "gb300", rows: DATA.days.days.filter((d) => d.summary && d.summary.type)
+    .map((d) => [d.day, 0, d.summary.type, d.shape ? d.shape.top_project : null, d.prompts_main || 0]) };
+  const order = (k) => ["day", "3h", "1h", "15m"].indexOf(L[k].unit) * 10 + (L[k].host === "gb300" ? 0 : 1) + (L[k].deep ? 2 : 0);
+  const keys = Object.keys(L).filter((k) => L[k].rows.length).sort((a, b) => order(a) - order(b));
+  if (keys.length < 2) return;
+  const dayTop = Object.fromEntries((DATA.days ? DATA.days.days : []).map((d) => [d.day, d.shape ? d.shape.top_project : null]));
+  h("h3", null, t("win.cmp.h"), parent);
+  const tbl = h("table", "topics", null, parent), hr = h("tr", null, null, h("thead", null, null, tbl)), tb = h("tbody", null, null, tbl);
+  t("win.cmp.cols").split(",").forEach((c) => h("th", null, c, hr));
+  keys.forEach((k) => {
+    const R = L[k].rows, n = R.length, by = {};
+    R.forEach((r) => { (by[r[0]] = by[r[0]] || []).push(r); });
+    const share = (...ty) => fmtP(R.filter((r) => ty.includes(r[2])).length / n);
+    const full = Object.values(by).filter((rs) => rs.length >= 3).flat().filter((r) => r[3] && dayTop[r[0]]);
+    const named = Object.values(by).filter((rs) => rs.some((r) => r[3]));
+    const lead = L[k].unit === "day" || !full.length ? "—" : fmtP(full.filter((r) => r[3] === dayTop[r[0]]).length / full.length);
+    const fp = L[k].unit === "day" || !named.length ? "—" : (named.reduce((a, rs) => a + new Set(rs.map((r) => r[3]).filter(Boolean)).size, 0) / named.length).toFixed(2);
+    const tr = h("tr", null, null, tb);
+    [k, fmtI(n), fmtI(Object.keys(by).length), share("build"), share("ops"), share("fix"), share("research", "writing"), share("mixed", "planning"), lead, fp]
+      .forEach((v, i) => h("td", i ? "num" : null, v, tr));
+  });
+  keys.forEach((a, i) => keys.slice(i + 1).forEach((b) => {
+    if (L[a].unit !== L[b].unit || L[a].host === L[b].host) return;
+    const ta = Object.fromEntries(L[a].rows.map((r) => [r[0] + " " + r[1], r[2]]));
+    const both = L[b].rows.filter((r) => ta[r[0] + " " + r[1]]);
+    if (both.length < 30) return;
+    const split = {};
+    both.forEach((r) => { const x = ta[r[0] + " " + r[1]]; if (x !== r[2]) split[x + " / " + r[2]] = (split[x + " / " + r[2]] || 0) + 1; });
+    const top = Object.entries(split).sort((p, q) => q[1] - p[1])[0];
+    h("p", null, t("win.agree", { u: L[a].unit, a, b, n: fmtI(both.length), p: fmtP(both.filter((r) => ta[r[0] + " " + r[1]] === r[2]).length / both.length),
+      x: top ? `${top[0]} (${fmtI(top[1])})` : "—" }), parent);
+  }));
+  h("p", "ex", t("win.cmp.note"), parent);
 }
 
 function blockList(day, parent) {

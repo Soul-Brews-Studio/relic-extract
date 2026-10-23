@@ -171,3 +171,4 @@ table.days td:first-child { width: 48px; }
 .chart.wgrid { width: 100%; height: auto; }
 .blocks { margin-top: 6px; display: grid; gap: 2px; }
 .blocks .lg-box { display: inline-block; vertical-align: middle; }
+table.topics td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
