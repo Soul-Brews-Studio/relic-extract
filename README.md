@@ -25,7 +25,13 @@ relic-extract status                # per stream: months, chunks, distinct texts
 relic-extract config                # the settings in effect (the file merged over the defaults)
 relic-extract analyse               # what a run would cut and what the clean step takes out; writes nothing
 relic-extract analyse --months 2026-10 --what-if min_chars=24 --what-if chunk.max_chars=2000
+relic-extract tui                   # the same report in the terminal; w tries a what-if live
 ```
+
+`tui` has six views: 1 overview (totals now / what-if), 2 months, 3 clean rules with 20 samples each (the raw text
+in full in the right pane, ← → next sample), 4 the messages that make the most chunks, 5 the most repeated texts,
+6 chunks per repository. `w` types a what-if (`min_chars=24 ; max_chars=2000`), Enter recomputes, an empty one
+clears it; ↑ ↓ choose, PgUp PgDn scroll, 1-6 or Tab switch, q quits. Nothing is written.
 
 `analyse` runs the same select / clean / cut as `run`, in memory, and prints: totals (raw cut -> other roles ->
 cleaned out -> kept, chunks, distinct texts), a table by month, each clean rule with its messages, characters and a

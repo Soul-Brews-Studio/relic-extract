@@ -18,28 +18,35 @@ use crate::clean::{Clean, Trace};
 use crate::config::Config;
 use crate::extract::{self, num};
 
-/// What one clean rule took out: (messages, characters, samples).
-type Dropped = (usize, usize, Vec<String>);
+/// What one clean rule took out: (messages, characters, samples of the raw text).
+pub type Dropped = (usize, usize, Vec<String>);
 
+/// One message that makes many chunks: (chunks, chars, month, role, its text up to SAMPLE_CHARS).
+pub type Big = (usize, usize, String, String, String);
+
+/// How much of a sample's text is kept, for the TUI's detail pane.
+pub const SAMPLE_CHARS: usize = 8000;
+
+/// Everything one pass counts, for one set of settings.
 #[derive(Default)]
-struct Side {
-    raw_msgs: usize,
-    raw_chunks: usize,
-    raw_chars: usize,
-    other_roles: BTreeMap<String, usize>,
-    drops: BTreeMap<String, Dropped>,
-    kept: usize,
-    chunks: usize,
-    chars: usize,
-    distinct: HashMap<String, (usize, String)>, // key -> (rows, head)
-    stripped: (usize, usize),                   // (messages, chars)
-    commands: usize,
-    redacted: BTreeMap<&'static str, usize>,
-    hist: [usize; 5],
-    biggest: Vec<(usize, usize, String, String, String)>, // (chunks, chars, month, role, head)
-    no_session: usize,
-    cats: HashMap<String, usize>,
-    months: BTreeMap<String, [usize; 5]>, // raw, kept, chunks, distinct, cleaned out
+pub struct Side {
+    pub raw_msgs: usize,
+    pub raw_chunks: usize,
+    pub raw_chars: usize,
+    pub other_roles: BTreeMap<String, usize>,
+    pub drops: BTreeMap<String, Dropped>,
+    pub kept: usize,
+    pub chunks: usize,
+    pub chars: usize,
+    pub distinct: HashMap<String, (usize, String)>, // key -> (rows, head)
+    pub stripped: (usize, usize),                   // (messages, chars)
+    pub commands: usize,
+    pub redacted: BTreeMap<&'static str, usize>,
+    pub hist: [usize; 5],
+    pub biggest: Vec<(usize, usize, String, String, String)>, // (chunks, chars, month, role, head)
+    pub no_session: usize,
+    pub cats: HashMap<String, usize>,
+    pub months: BTreeMap<String, [usize; 5]>, // raw, kept, chunks, distinct, cleaned out
 }
 
 impl Side {
@@ -86,7 +93,7 @@ impl Side {
 }
 
 /// One line, at most `n` characters, for a sample.
-fn head(s: &str, n: usize) -> String {
+pub fn head(s: &str, n: usize) -> String {
     let one: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
     if one.chars().count() <= n {
         one
@@ -95,7 +102,7 @@ fn head(s: &str, n: usize) -> String {
     }
 }
 
-fn mchars(n: usize) -> String {
+pub fn mchars(n: usize) -> String {
     format!("{:.1}", n as f64 / 1e6)
 }
 
@@ -152,7 +159,7 @@ fn month_pass(
                     e.0 += 1;
                     e.1 += raw.chars().count();
                     if e.2.len() < samples {
-                        e.2.push(head(raw, 70));
+                        e.2.push(extract::clip(raw, SAMPLE_CHARS).to_string());
                     }
                     m[4] += 1;
                     continue;
@@ -178,7 +185,7 @@ fn month_pass(
                 body.chars().count(),
                 month.to_string(),
                 role.to_string(),
-                head(&body, 60),
+                extract::clip(&body, SAMPLE_CHARS).to_string(),
             ));
         }
         let cat = c
@@ -219,6 +226,44 @@ fn row(label: &str, a: usize, b: Option<usize>) {
     }
 }
 
+/// One analyse pass: the base settings, and the what-if settings when there are any.
+pub struct Report {
+    pub name: String,
+    pub source: String,
+    pub n_months: usize,
+    pub secs: f64,
+    pub sets: Vec<String>,
+    pub base: Side,
+    pub alt: Option<Side>,
+}
+
+impl Report {
+    /// The clean rules, most messages first, then the ones only the what-if has.
+    pub fn rules(&self) -> Vec<String> {
+        let mut r: Vec<(&String, &Dropped)> = self.base.drops.iter().collect();
+        r.sort_by_key(|x| std::cmp::Reverse(x.1.0));
+        let mut labels: Vec<String> = r.iter().map(|x| x.0.clone()).collect();
+        if let Some(b) = &self.alt {
+            labels.extend(b.drops.keys().filter(|l| !self.base.drops.contains_key(*l)).cloned());
+        }
+        labels
+    }
+
+    /// The texts held by more than one row, most first: (rows, head).
+    pub fn repeats(&self) -> Vec<(usize, String)> {
+        let mut rep: Vec<(usize, String)> = self.base.distinct.values().filter(|v| v.0 > 1).cloned().collect();
+        rep.sort_by_key(|x| std::cmp::Reverse(x.0));
+        rep
+    }
+
+    /// Chunks per repository, most first.
+    pub fn repos(&self) -> Vec<(String, usize)> {
+        let mut c: Vec<(String, usize)> = self.base.cats.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        c.sort_by(|x, y| y.1.cmp(&x.1).then(x.0.cmp(&y.0)));
+        c
+    }
+}
+
 pub fn analyse(
     base: &Config,
     alt: Option<(&Config, Vec<String>)>,
@@ -227,6 +272,21 @@ pub fn analyse(
     samples: usize,
     top: usize,
 ) -> Result<(), String> {
+    let tty = std::io::IsTerminal::is_terminal(&std::io::stderr());
+    let mut r = compute(base, alt, months, name, samples, tty)?;
+    print(&mut r, top);
+    Ok(())
+}
+
+/// The pass itself: every chosen month, in parallel, merged in month order.
+pub fn compute(
+    base: &Config,
+    alt: Option<(&Config, Vec<String>)>,
+    months: Option<Vec<String>>,
+    name: &str,
+    samples: usize,
+    tty: bool,
+) -> Result<Report, String> {
     let src = extract::months_in(base.source());
     if src.is_empty() {
         return Err(format!("no month files in {}", base.source()));
@@ -238,7 +298,6 @@ pub fn analyse(
         }
     }
     let t0 = std::time::Instant::now();
-    let tty = std::io::IsTerminal::is_terminal(&std::io::stderr());
     let sess_a = extract::sessions(base.source(), base.v["sessions"] != "main")?;
     let sess_b = match &alt {
         Some((c, _)) => Some(extract::sessions(c.source(), c.v["sessions"] != "main")?),
@@ -272,17 +331,36 @@ pub fn analyse(
         a.merge(x, samples);
         b.merge(y, 0);
     }
-    let alt_on = alt.is_some();
-    let bv = |f: &dyn Fn(&Side) -> usize| alt_on.then(|| f(&b));
+    Ok(Report {
+        name: name.to_string(),
+        source: base.source().to_string(),
+        n_months,
+        secs: t0.elapsed().as_secs_f64(),
+        sets: alt.as_ref().map(|(_, s)| s.clone()).unwrap_or_default(),
+        base: a,
+        alt: alt.is_some().then_some(b),
+    })
+}
+
+/// The report as text, for `analyse`.
+pub fn print(r: &mut Report, top: usize) {
+    let (name, n_months) = (r.name.clone(), r.n_months);
+    let rules = r.rules();
+    let rep = r.repeats();
+    let cats = r.repos();
+    let alt_on = r.alt.is_some();
+    let empty = Side::default();
+    let b = r.alt.as_ref().unwrap_or(&empty);
+    let a = &r.base;
+    let bv = |f: &dyn Fn(&Side) -> usize| alt_on.then(|| f(b));
     let first = a.months.keys().next().cloned().unwrap_or_default();
     let last = a.months.keys().last().cloned().unwrap_or_default();
     println!(
         "relic-extract analyse · {name} · {n_months} months ({first} … {last}) · {} · {:.1}s",
-        base.source(),
-        t0.elapsed().as_secs_f64()
+        r.source, r.secs
     );
-    if let Some((_, sets)) = &alt {
-        println!("what-if: {}", sets.join(" · "));
+    if alt_on {
+        println!("what-if: {}", r.sets.join(" · "));
         println!("\n  {:<26} {:>12} {:>12} {:>12} {:>8}", "", "now", "what-if", "change", "");
     } else {
         println!();
@@ -333,16 +411,9 @@ pub fn analyse(
         "\nclean rules                                   messages   M chars{}   sample",
         if alt_on { "   what-if" } else { "" }
     );
-    let mut rules: Vec<(&String, &Dropped)> = a.drops.iter().collect();
-    rules.sort_by_key(|r| std::cmp::Reverse(r.1.0));
-    let mut labels: Vec<&String> = rules.iter().map(|r| r.0).collect();
-    for l in b.drops.keys() {
-        if !a.drops.contains_key(l) {
-            labels.push(l);
-        }
-    }
-    for l in labels {
+    for l in &rules {
         let (n, ch, sm) = a.drops.get(l).cloned().unwrap_or_default();
+        let sm: Vec<String> = sm.iter().map(|x| head(x, 70)).collect();
         let w = if alt_on {
             format!(" {:>9}", num(b.drops.get(l).map_or(0, |d| d.0)))
         } else {
@@ -385,21 +456,18 @@ pub fn analyse(
         num(h[3]),
         num(h[4])
     );
-    a.biggest.sort_by_key(|x| std::cmp::Reverse(x.0));
-    for (n, ch, m, r, t) in a.biggest.iter().take(top) {
-        println!("  {:>5} chunks {:>6} M chars  {m} {r:<9} {t}", n, mchars(*ch));
+    let mut big: Vec<&Big> = a.biggest.iter().collect();
+    big.sort_by_key(|x| std::cmp::Reverse(x.0));
+    for (n, ch, m, role, t) in big.iter().take(top) {
+        println!("  {:>5} chunks {:>6} M chars  {m} {role:<9} {}", n, mchars(*ch), head(t, 60));
     }
 
     println!("\nmost repeated texts (rows holding one chunk text)");
-    let mut rep: Vec<&(usize, String)> = a.distinct.values().filter(|v| v.0 > 1).collect();
-    rep.sort_by_key(|x| std::cmp::Reverse(x.0));
     for (n, t) in rep.iter().take(top) {
         println!("  {:>8} ×  {t}", num(*n));
     }
 
-    let mut cats: Vec<(&String, &usize)> = a.cats.iter().collect();
-    cats.sort_by(|x, y| y.1.cmp(x.1));
-    let c: Vec<String> = cats.iter().take(top).map(|(k, v)| format!("{k} {}", num(**v))).collect();
+    let c: Vec<String> = cats.iter().take(top).map(|(k, v)| format!("{k} {}", num(*v))).collect();
     println!(
         "\nsessions   chunks without a session: {}{}",
         num(a.no_session),
@@ -410,5 +478,4 @@ pub fn analyse(
         }
     );
     println!("  top repositories by chunks: {}", c.join(" · "));
-    Ok(())
 }
