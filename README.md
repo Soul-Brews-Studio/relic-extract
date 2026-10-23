@@ -36,6 +36,14 @@ then `streams.<stream>`, then `chunk`, then `[extract]`. Nothing is written.
 
 `--config FILE` or `ARRA_CONFIG` points to another config.
 
+Months are cut in parallel (`RELIC_EXTRACT_THREADS`, default one per core up to 8); a full run of 15 months takes
+about 2 s on an M5. One run at a time per output folder (`OUT/.lock`). Parts and `_extract.json` are written
+privately (0600) and atomically. A mistyped or wrongly typed key under `[extract]` is an error.
+
+`just verify` cuts the raw and the cleaned stream from a frozen copy of the source and compares each with its
+reference, every row and column (`scripts/verify.sh`). The crate is a library (`src/lib.rs`) with a thin CLI, so
+relic-embed can use the same msgkey, key and cut.
+
 The Python version (`src/relic_extract`, `uv run relic-extract …`) is kept as the reference: `just parity` cuts every
 month with the binary into `~/.relic-extract-parity` and compares it with `~/.relic-extract` row by row, every column,
 and the row order. Both write the same `_extract.json` hash, so either can continue after the other.

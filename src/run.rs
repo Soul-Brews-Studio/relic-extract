@@ -20,6 +20,33 @@ pub fn pretty(v: &Value) -> String {
     String::from_utf8(buf).unwrap()
 }
 
+/// Worker threads for months: RELIC_EXTRACT_THREADS, else one per core up to 8 (each holds one month in memory).
+pub fn threads() -> usize {
+    std::env::var("RELIC_EXTRACT_THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|&n: &usize| n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()).min(8))
+}
+
+/// `f` over `items` on `threads()` workers; results in the items' order.
+pub fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let out: Vec<std::sync::Mutex<Option<R>>> = items.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    std::thread::scope(|sc| {
+        for _ in 0..threads().min(items.len()) {
+            sc.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(it) = items.get(i) else { break };
+                    *out[i].lock().unwrap() = Some(f(it));
+                }
+            });
+        }
+    });
+    out.into_iter().map(|m| m.into_inner().unwrap().unwrap()).collect()
+}
+
 fn mtime(p: &Path) -> Option<std::time::SystemTime> {
     fs::metadata(p).and_then(|m| m.modified()).ok()
 }
@@ -28,7 +55,10 @@ fn mtime(p: &Path) -> Option<std::time::SystemTime> {
 pub fn run(cfg: &Config, months: Option<Vec<String>>, force: bool, only: Option<&str>) -> Result<Vec<Done>, String> {
     let src = extract::months_in(cfg.source());
     if src.is_empty() {
-        return Err(format!("no month files in {}\n  relic-scan run   (or set [extract] source)", cfg.source()));
+        return Err(format!(
+            "no month files in {}\n  relic-scan run   (or set [extract] source)",
+            cfg.source()
+        ));
     }
     // "changed" | "all" | a list
     let want: Option<Vec<String>> = match months {
@@ -36,7 +66,9 @@ pub fn run(cfg: &Config, months: Option<Vec<String>>, force: bool, only: Option<
             m.sort();
             Some(m)
         }
-        None => cfg.v["months"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()),
+        None => cfg.v["months"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()),
     };
     let changed_only = want.is_none() && cfg.v["months"] == "changed";
     if let Some(w) = &want {
@@ -46,10 +78,12 @@ pub fn run(cfg: &Config, months: Option<Vec<String>>, force: bool, only: Option<
         }
     }
     if let Some(s) = only
-        && !config::STREAMS.contains(&s) {
+        && !config::STREAMS.contains(&s)
+    {
         return Err(format!("unknown stream {s} (known: {})", config::STREAMS.join(", ")));
     }
-    let sess = extract::sessions(cfg.source(), cfg.v["sessions"] != "main");
+    let _lock = config::lock_out(cfg.out())?;
+    let sess = extract::sessions(cfg.source(), cfg.v["sessions"] != "main")?;
     let mut done = vec![];
     for name in config::STREAMS {
         let st = cfg.stream(name);
@@ -58,13 +92,17 @@ pub fn run(cfg: &Config, months: Option<Vec<String>>, force: bool, only: Option<
         }
         let sdir = Path::new(cfg.out()).join(name);
         let state_f = sdir.join("_extract.json");
-        let state: Value = fs::read(&state_f).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(json!({}));
+        let state: Value = fs::read(&state_f)
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or(json!({}));
         let h = cfg.stream_hash(name);
         let stale = state["hash"].as_str() != Some(h.as_str());
         if stale && state.as_object().is_some_and(|m| !m.is_empty()) {
             eprintln!("extract {name}: settings changed since the last run, every month is cut again");
         }
         let before = done.len();
+        let mut todo = vec![];
         for (m, f) in &src {
             if want.as_ref().is_some_and(|w| !w.contains(m)) {
                 continue;
@@ -74,7 +112,11 @@ pub fn run(cfg: &Config, months: Option<Vec<String>>, force: bool, only: Option<
             if changed_only && fresh && !stale && !force {
                 continue;
             }
-            done.push(extract::cut_month(cfg, name, m, f, &out, &sess)?);
+            todo.push((m.as_str(), f.as_path(), out));
+        }
+        let cut = par_map(&todo, |(m, f, out)| extract::cut_month(cfg, name, m, f, out, &sess));
+        for r in cut {
+            done.push(r?);
         }
         // a stale stream cut for a few months only keeps its old hash, so the rest are cut on the next full run
         if !(stale && want.is_some()) {
@@ -82,9 +124,13 @@ pub fn run(cfg: &Config, months: Option<Vec<String>>, force: bool, only: Option<
             let at = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%z").to_string();
             let body = json!({"hash": h, "settings": {"stream": st, "dedupe": cfg.v["dedupe"], "chunk": cfg.v["chunk"]},
                               "source": cfg.source(), "at": at});
-            let tmp = sdir.join("_extract.json.part");
-            fs::write(&tmp, pretty(&body)).map_err(|e| e.to_string())?;
-            fs::rename(&tmp, &state_f).map_err(|e| e.to_string())?;
+            // written last: a part the state names is always on disk
+            config::write_private(&state_f, |mut f| {
+                use std::io::Write;
+                f.write_all(pretty(&body).as_bytes())
+                    .and_then(|_| f.sync_all())
+                    .map_err(|e| e.to_string())
+            })?;
         }
         eprintln!("extract {name}: {} month(s) cut -> {}", done.len() - before, sdir.display());
     }
@@ -95,15 +141,31 @@ pub fn status(cfg: &Config) {
     for name in config::STREAMS {
         let on = if cfg.stream(name)["enabled"] == true { "on " } else { "off" };
         let d = Path::new(cfg.out()).join(name);
-        let mut parts: Vec<_> = fs::read_dir(&d).into_iter().flatten().flatten().map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "parquet")).collect();
+        let mut parts: Vec<_> = fs::read_dir(&d)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "parquet"))
+            .collect();
         parts.sort();
         if parts.is_empty() {
             println!("{name:9} {on}  no parts");
             continue;
         }
-        let (n, u, last) = crate::read::part_stats(&parts);
-        println!("{name:9} {on}  {} months · {} chunks · {} distinct texts · newest {}", parts.len(), extract::num(n),
-                 extract::num(u), last.unwrap_or_default());
+        let (n, u, last) = match crate::read::part_stats(&parts) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("{name:9} {on}  ✗ {e}");
+                continue;
+            }
+        };
+        println!(
+            "{name:9} {on}  {} months · {} chunks · {} distinct texts · newest {}",
+            parts.len(),
+            extract::num(n),
+            extract::num(u),
+            last.unwrap_or_default()
+        );
     }
 }

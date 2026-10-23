@@ -18,13 +18,16 @@ use crate::clean::{Clean, Trace};
 use crate::config::Config;
 use crate::extract::{self, num};
 
+/// What one clean rule took out: (messages, characters, samples).
+type Dropped = (usize, usize, Vec<String>);
+
 #[derive(Default)]
 struct Side {
     raw_msgs: usize,
     raw_chunks: usize,
     raw_chars: usize,
     other_roles: BTreeMap<String, usize>,
-    drops: BTreeMap<String, (usize, usize, Vec<String>)>, // label -> (messages, chars, samples)
+    drops: BTreeMap<String, Dropped>,
     kept: usize,
     chunks: usize,
     chars: usize,
@@ -39,10 +42,57 @@ struct Side {
     months: BTreeMap<String, [usize; 5]>, // raw, kept, chunks, distinct, cleaned out
 }
 
+impl Side {
+    /// Add one month's numbers (months merged in order, so samples come from the earliest months, as in one pass).
+    fn merge(&mut self, o: Side, samples: usize) {
+        self.raw_msgs += o.raw_msgs;
+        self.raw_chunks += o.raw_chunks;
+        self.raw_chars += o.raw_chars;
+        for (k, v) in o.other_roles {
+            *self.other_roles.entry(k).or_default() += v;
+        }
+        for (k, (n, ch, sm)) in o.drops {
+            let e = self.drops.entry(k).or_default();
+            e.0 += n;
+            e.1 += ch;
+            for x in sm {
+                if e.2.len() < samples {
+                    e.2.push(x);
+                }
+            }
+        }
+        self.kept += o.kept;
+        self.chunks += o.chunks;
+        self.chars += o.chars;
+        for (k, (n, h)) in o.distinct {
+            self.distinct.entry(k).or_insert((0, h)).0 += n;
+        }
+        self.stripped.0 += o.stripped.0;
+        self.stripped.1 += o.stripped.1;
+        self.commands += o.commands;
+        for (k, v) in o.redacted {
+            *self.redacted.entry(k).or_default() += v;
+        }
+        for (a, b) in self.hist.iter_mut().zip(o.hist) {
+            *a += b;
+        }
+        self.biggest.extend(o.biggest);
+        self.no_session += o.no_session;
+        for (k, v) in o.cats {
+            *self.cats.entry(k).or_default() += v;
+        }
+        self.months.extend(o.months);
+    }
+}
+
 /// One line, at most `n` characters, for a sample.
 fn head(s: &str, n: usize) -> String {
     let one: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
-    if one.chars().count() <= n { one } else { format!("{}…", one.chars().take(n).collect::<String>()) }
+    if one.chars().count() <= n {
+        one
+    } else {
+        format!("{}…", one.chars().take(n).collect::<String>())
+    }
 }
 
 fn mchars(n: usize) -> String {
@@ -59,10 +109,20 @@ fn bucket(n: usize) -> usize {
     }
 }
 
-fn month_pass(cfg: &Config, name: &str, month: &str, batches: &[crate::read::Cols], sess: &extract::Sessions,
-              samples: usize, side: &mut Side) {
+fn month_pass(
+    cfg: &Config,
+    name: &str,
+    month: &str,
+    batches: &[crate::read::Cols],
+    sess: &extract::Sessions,
+    samples: usize,
+    side: &mut Side,
+) {
     let st = cfg.stream(name);
-    let roles: Vec<&str> = st["roles"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).collect()).unwrap_or_default();
+    let roles: Vec<&str> = st["roles"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|x| x.as_str()).collect())
+        .unwrap_or_default();
     let clean = Clean::from(st);
     let mut month_keys = std::collections::HashSet::new();
     let mut m = [0usize; 5];
@@ -75,7 +135,10 @@ fn month_pass(cfg: &Config, name: &str, month: &str, batches: &[crate::read::Col
         side.raw_chunks += extract::pieces(cfg, name, raw).len();
         let role = c.role.get(i).unwrap_or("");
         if !roles.is_empty() && !roles.contains(&role) {
-            *side.other_roles.entry(if role.is_empty() { "(none)".into() } else { role.to_string() }).or_default() += 1;
+            *side
+                .other_roles
+                .entry(if role.is_empty() { "(none)".into() } else { role.to_string() })
+                .or_default() += 1;
             m[4] += 1;
             continue;
         }
@@ -110,9 +173,20 @@ fn month_pass(cfg: &Config, name: &str, month: &str, batches: &[crate::read::Col
         side.chars += body.chars().count();
         side.hist[bucket(pieces.len())] += 1;
         if pieces.len() > 10 {
-            side.biggest.push((pieces.len(), body.chars().count(), month.to_string(), role.to_string(), head(&body, 60)));
+            side.biggest.push((
+                pieces.len(),
+                body.chars().count(),
+                month.to_string(),
+                role.to_string(),
+                head(&body, 60),
+            ));
         }
-        let cat = c.sid.get(i).and_then(|s| sess.get(s)).and_then(|x| x.0.clone()).unwrap_or("(no session)".into());
+        let cat = c
+            .sid
+            .get(i)
+            .and_then(|s| sess.get(s))
+            .and_then(|x| x.0.clone())
+            .unwrap_or("(no session)".into());
         for piece in &pieces {
             let k = extract::key(piece);
             month_keys.insert(k.clone());
@@ -135,14 +209,24 @@ fn row(label: &str, a: usize, b: Option<usize>) {
         None => println!("  {label:<26} {:>12}", num(a)),
         Some(b) => {
             let d = b as i64 - a as i64;
-            let pct = if a > 0 { format!("{:+.1}%", d as f64 * 100.0 / a as f64) } else { String::new() };
+            let pct = if a > 0 {
+                format!("{:+.1}%", d as f64 * 100.0 / a as f64)
+            } else {
+                String::new()
+            };
             println!("  {label:<26} {:>12} {:>12} {:>+12} {pct:>8}", num(a), num(b), d);
         }
     }
 }
 
-pub fn analyse(base: &Config, alt: Option<(&Config, Vec<String>)>, months: Option<Vec<String>>, name: &str, samples: usize,
-               top: usize) -> Result<(), String> {
+pub fn analyse(
+    base: &Config,
+    alt: Option<(&Config, Vec<String>)>,
+    months: Option<Vec<String>>,
+    name: &str,
+    samples: usize,
+    top: usize,
+) -> Result<(), String> {
     let src = extract::months_in(base.source());
     if src.is_empty() {
         return Err(format!("no month files in {}", base.source()));
@@ -155,33 +239,48 @@ pub fn analyse(base: &Config, alt: Option<(&Config, Vec<String>)>, months: Optio
     }
     let t0 = std::time::Instant::now();
     let tty = std::io::IsTerminal::is_terminal(&std::io::stderr());
-    let sess_a = extract::sessions(base.source(), base.v["sessions"] != "main");
-    let sess_b = alt.as_ref().map(|(c, _)| extract::sessions(c.source(), c.v["sessions"] != "main"));
-    let (mut a, mut b) = (Side::default(), Side::default());
-    let mut n_months = 0;
-    for (m, f) in &src {
-        if months.as_ref().is_some_and(|w| !w.contains(m)) {
-            continue;
-        }
+    let sess_a = extract::sessions(base.source(), base.v["sessions"] != "main")?;
+    let sess_b = match &alt {
+        Some((c, _)) => Some(extract::sessions(c.source(), c.v["sessions"] != "main")?),
+        None => None,
+    };
+    let todo: Vec<(&String, &std::path::PathBuf)> = src
+        .iter()
+        .filter(|(m, _)| months.as_ref().is_none_or(|w| w.contains(*m)))
+        .collect();
+    let n_months = todo.len();
+    let done = std::sync::atomic::AtomicUsize::new(0);
+    let per = crate::run::par_map(&todo, |(m, f)| -> Result<(Side, Side), String> {
         let batches = extract::read_stream(base, name, f)?;
+        let (mut a, mut b) = (Side::default(), Side::default());
         month_pass(base, name, m, &batches, &sess_a, samples, &mut a);
         if let (Some((c, _)), Some(s)) = (&alt, &sess_b) {
             month_pass(c, name, m, &batches, s, 0, &mut b);
         }
-        n_months += 1;
+        let n = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         if tty {
-            eprint!("\r  analyse {name} {m} …");
+            eprint!("\r  analyse {name}: {n}/{n_months} months …");
         }
-    }
+        Ok((a, b))
+    });
     if tty {
-        eprint!("\r{:40}\r", "");
+        eprint!("\r{:50}\r", "");
+    }
+    let (mut a, mut b) = (Side::default(), Side::default());
+    for r in per {
+        let (x, y) = r?;
+        a.merge(x, samples);
+        b.merge(y, 0);
     }
     let alt_on = alt.is_some();
     let bv = |f: &dyn Fn(&Side) -> usize| alt_on.then(|| f(&b));
     let first = a.months.keys().next().cloned().unwrap_or_default();
     let last = a.months.keys().last().cloned().unwrap_or_default();
-    println!("relic-extract analyse · {name} · {n_months} months ({first} … {last}) · {} · {:.1}s", base.source(),
-             t0.elapsed().as_secs_f64());
+    println!(
+        "relic-extract analyse · {name} · {n_months} months ({first} … {last}) · {} · {:.1}s",
+        base.source(),
+        t0.elapsed().as_secs_f64()
+    );
     if let Some((_, sets)) = &alt {
         println!("what-if: {}", sets.join(" · "));
         println!("\n  {:<26} {:>12} {:>12} {:>12} {:>8}", "", "now", "what-if", "change", "");
@@ -189,14 +288,30 @@ pub fn analyse(base: &Config, alt: Option<(&Config, Vec<String>)>, months: Optio
         println!();
     }
     row("messages (raw cut)", a.raw_msgs, bv(&|s| s.raw_msgs));
-    row("  other roles", a.other_roles.values().sum(), bv(&|s| s.other_roles.values().sum()));
-    row("  cleaned out", a.drops.values().map(|d| d.0).sum(), bv(&|s| s.drops.values().map(|d| d.0).sum()));
+    row(
+        "  other roles",
+        a.other_roles.values().sum(),
+        bv(&|s| s.other_roles.values().sum()),
+    );
+    row(
+        "  cleaned out",
+        a.drops.values().map(|d| d.0).sum(),
+        bv(&|s| s.drops.values().map(|d| d.0).sum()),
+    );
     row("  kept", a.kept, bv(&|s| s.kept));
     row("chunks (raw cut)", a.raw_chunks, bv(&|s| s.raw_chunks));
     row("chunks", a.chunks, bv(&|s| s.chunks));
     row("distinct texts", a.distinct.len(), bv(&|s| s.distinct.len()));
-    println!("  {:<26} {:>12}{}", "M chars (raw -> kept)", format!("{} -> {}", mchars(a.raw_chars), mchars(a.chars)),
-             if alt_on { format!(" {:>12}", format!("-> {}", mchars(b.chars))) } else { String::new() });
+    println!(
+        "  {:<26} {:>12}{}",
+        "M chars (raw -> kept)",
+        format!("{} -> {}", mchars(a.raw_chars), mchars(a.chars)),
+        if alt_on {
+            format!(" {:>12}", format!("-> {}", mchars(b.chars)))
+        } else {
+            String::new()
+        }
+    );
     if !a.other_roles.is_empty() {
         let r: Vec<String> = a.other_roles.iter().map(|(k, v)| format!("{k} {}", num(*v))).collect();
         println!("  other roles: {}", r.join(" · "));
@@ -204,12 +319,22 @@ pub fn analyse(base: &Config, alt: Option<(&Config, Vec<String>)>, months: Optio
 
     println!("\nby month       raw msgs        kept      chunks    distinct  cleaned out");
     for (m, v) in &a.months {
-        println!("  {m:<9} {:>11} {:>11} {:>11} {:>11} {:>12}", num(v[0]), num(v[1]), num(v[2]), num(v[3]), num(v[4]));
+        println!(
+            "  {m:<9} {:>11} {:>11} {:>11} {:>11} {:>12}",
+            num(v[0]),
+            num(v[1]),
+            num(v[2]),
+            num(v[3]),
+            num(v[4])
+        );
     }
 
-    println!("\nclean rules                                   messages   M chars{}   sample", if alt_on { "   what-if" } else { "" });
-    let mut rules: Vec<(&String, &(usize, usize, Vec<String>))> = a.drops.iter().collect();
-    rules.sort_by(|x, y| y.1.0.cmp(&x.1.0));
+    println!(
+        "\nclean rules                                   messages   M chars{}   sample",
+        if alt_on { "   what-if" } else { "" }
+    );
+    let mut rules: Vec<(&String, &Dropped)> = a.drops.iter().collect();
+    rules.sort_by_key(|r| std::cmp::Reverse(r.1.0));
     let mut labels: Vec<&String> = rules.iter().map(|r| r.0).collect();
     for l in b.drops.keys() {
         if !a.drops.contains_key(l) {
@@ -218,30 +343,56 @@ pub fn analyse(base: &Config, alt: Option<(&Config, Vec<String>)>, months: Optio
     }
     for l in labels {
         let (n, ch, sm) = a.drops.get(l).cloned().unwrap_or_default();
-        let w = if alt_on { format!(" {:>9}", num(b.drops.get(l).map_or(0, |d| d.0))) } else { String::new() };
-        println!("  {:<44} {:>9} {:>9}{w}   {}", head(l, 44), num(n), mchars(ch), sm.first().cloned().unwrap_or_default());
+        let w = if alt_on {
+            format!(" {:>9}", num(b.drops.get(l).map_or(0, |d| d.0)))
+        } else {
+            String::new()
+        };
+        println!(
+            "  {:<44} {:>9} {:>9}{w}   {}",
+            head(l, 44),
+            num(n),
+            mchars(ch),
+            sm.first().cloned().unwrap_or_default()
+        );
         for s in sm.iter().skip(1) {
-            println!("  {:<44} {:>9} {:>9}{}   {s}", "", "", "", if alt_on { " ".repeat(10) } else { String::new() });
+            println!(
+                "  {:<44} {:>9} {:>9}{}   {s}",
+                "",
+                "",
+                "",
+                if alt_on { " ".repeat(10) } else { String::new() }
+            );
         }
     }
-    println!("  kept messages: {} had a stripped tag ({} M chars removed) · {} slash commands kept as \"/x args\"",
-             num(a.stripped.0), mchars(a.stripped.1), num(a.commands));
+    println!(
+        "  kept messages: {} had a stripped tag ({} M chars removed) · {} slash commands kept as \"/x args\"",
+        num(a.stripped.0),
+        mchars(a.stripped.1),
+        num(a.commands)
+    );
     if !a.redacted.is_empty() {
         let r: Vec<String> = a.redacted.iter().map(|(k, v)| format!("{k} {}", num(*v))).collect();
         println!("  redacted: {}", r.join(" · "));
     }
 
     let h = &a.hist;
-    println!("\nchunks per message   1: {} · 2: {} · 3-5: {} · 6-10: {} · >10: {}", num(h[0]), num(h[1]), num(h[2]), num(h[3]),
-             num(h[4]));
-    a.biggest.sort_by(|x, y| y.0.cmp(&x.0));
+    println!(
+        "\nchunks per message   1: {} · 2: {} · 3-5: {} · 6-10: {} · >10: {}",
+        num(h[0]),
+        num(h[1]),
+        num(h[2]),
+        num(h[3]),
+        num(h[4])
+    );
+    a.biggest.sort_by_key(|x| std::cmp::Reverse(x.0));
     for (n, ch, m, r, t) in a.biggest.iter().take(top) {
         println!("  {:>5} chunks {:>6} M chars  {m} {r:<9} {t}", n, mchars(*ch));
     }
 
     println!("\nmost repeated texts (rows holding one chunk text)");
     let mut rep: Vec<&(usize, String)> = a.distinct.values().filter(|v| v.0 > 1).collect();
-    rep.sort_by(|x, y| y.0.cmp(&x.0));
+    rep.sort_by_key(|x| std::cmp::Reverse(x.0));
     for (n, t) in rep.iter().take(top) {
         println!("  {:>8} ×  {t}", num(*n));
     }
@@ -249,8 +400,15 @@ pub fn analyse(base: &Config, alt: Option<(&Config, Vec<String>)>, months: Optio
     let mut cats: Vec<(&String, &usize)> = a.cats.iter().collect();
     cats.sort_by(|x, y| y.1.cmp(x.1));
     let c: Vec<String> = cats.iter().take(top).map(|(k, v)| format!("{k} {}", num(**v))).collect();
-    println!("\nsessions   chunks without a session: {}{}", num(a.no_session),
-             if alt_on { format!(" (what-if {})", num(b.no_session)) } else { String::new() });
+    println!(
+        "\nsessions   chunks without a session: {}{}",
+        num(a.no_session),
+        if alt_on {
+            format!(" (what-if {})", num(b.no_session))
+        } else {
+            String::new()
+        }
+    );
     println!("  top repositories by chunks: {}", c.join(" · "));
     Ok(())
 }
