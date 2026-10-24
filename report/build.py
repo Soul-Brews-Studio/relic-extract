@@ -11,6 +11,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -323,6 +324,21 @@ def share(data):
                 ft["terms"] = [ft.get("name") or f"feature {ft['id']}"]
 
 
+UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
+
+
+def scrub_ids(x):
+    """A session id can sit inside a folder name (Claude Code's per-session scratchpad dirs): the share and public
+    views write "<session>" in its place, keys included."""
+    if isinstance(x, str):
+        return UUID.sub("<session>", x)
+    if isinstance(x, list):
+        return [scrub_ids(v) for v in x]
+    if isinstance(x, dict):
+        return {scrub_ids(k): scrub_ids(v) for k, v in x.items()}
+    return x
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scan", default=str(HOME / ".relic-scan"))
@@ -386,6 +402,8 @@ def main():
                 t["terms"] = [t.get("name") or f"topic {t['id']}"]
     if a.share:
         share(data)
+    if a.share or a.public:
+        data = scrub_ids(data)
     (out / "report.json").write_text(json.dumps(data, ensure_ascii=False, indent=1))
     n = tidy(data, out)
     (out / "index.html").write_text(page(data))
