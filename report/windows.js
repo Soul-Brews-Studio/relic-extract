@@ -8,6 +8,7 @@ const WIN = DATA.windows || {};
 const WTYPES = ["build", "fix", "ops", "research", "writing", "planning", "mixed"];
 const wcolor = (ty) => `var(--s${WTYPES.indexOf(ty) + 1})`;
 const fmtI = (v) => Number(v).toLocaleString("en-US");
+const sids = (a) => a.slice(0, 4).map((x) => x.slice(0, 8)).join(" ") + (a.length > 4 ? ` +${a.length - 4}` : "");
 const hm = (m) => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
 const SPAN = { "3h": 180, "1h": 60, "15m": 15, day: 1440 };
 const laneOrder = (k) => ["3h", "1h", "15m", "day"].indexOf(WIN[k].unit) * 10 + (WIN[k].host === "gb300" ? 0 : 1);
@@ -41,7 +42,7 @@ function winGrid(parent, lane) {
     Object.entries({ x: X0 + di[r[0]] * cw, y: Y0 + (r[1] / span) * ch, width: Math.max(1, cw - (cw > 3 ? 1 : 0)), height: Math.max(1, ch - 1),
       fill: wcolor(r[2]), class: "cell" }).forEach(([a, b]) => rect.setAttribute(a, b));
     rect.addEventListener("pointermove", (ev) => showTip(ev, `${r[0]} ${hm(r[1])}-${hm(r[1] + span)}`,
-      [[t("day.type." + r[2]), r[3] || "", null], [t("win.prompts"), fmtN(r[4]), null]].concat(r[5] ? [[r[5].slice(0, 140), "", null]] : [])));
+      [[t("day.type." + r[2]), r[3] || "", null], [t("win.prompts"), fmtN(r[4]), null]].concat(r[5] ? [[r[5].slice(0, 140), "", null]] : []).concat(r[8] ? [[t("win.sess"), sids(r[8]), null]] : [])));
     rect.addEventListener("pointerleave", hideTip);
     rect.addEventListener("click", () => document.getElementById("d-" + r[0])?.scrollIntoView({ behavior: "smooth", block: "center" }));
     svg.appendChild(rect);
@@ -74,7 +75,7 @@ function winSection() {
         const tb = h("tbody", null, null, h("table", "topics", null, body));
         [...le].sort((a, b) => b[4] - a[4]).slice(0, 24).forEach((r) => {
           const tr = h("tr", null, null, tb);
-          h("td", "ex", `${r[0]} ${hm(r[1])} · ${r[3] || ""}`, tr);
+          h("td", "ex", `${r[0]} ${hm(r[1])} · ${r[3] || ""}${r[8] ? " · " + sids(r[8]) : ""}`, tr);
           const c = h("td", null, null, tr);
           h("div", null, r[7], c);
           if (r[6] && r[6] !== "none") h("div", "ex", t("win.friction") + " " + r[6], c);
@@ -142,6 +143,6 @@ function blockList(day, parent) {
   rows.forEach((r) => {
     const ln = h("div", "ex", null, box);
     const sw = h("span", "lg-box", null, ln); sw.style.background = wcolor(r[2]);
-    h("span", null, ` ${hm(r[1])}-${hm(r[1] + 180)} ${t("day.type." + r[2])}${r[3] ? " · " + r[3] : ""}${r[5] ? " — " + r[5] : ""}`, ln);
+    h("span", null, ` ${hm(r[1])}-${hm(r[1] + 180)} ${t("day.type." + r[2])}${r[3] ? " · " + r[3] : ""}${r[5] ? " — " + r[5] : ""}${r[8] ? " · " + sids(r[8]) : ""}`, ln);
   });
 }

@@ -248,22 +248,36 @@ def page(data):
 TYPES = ("build", "fix", "ops", "research", "writing", "planning", "mixed")
 
 
-def windows(rep, public, share):
+def window_sessions(scan, extract):
+    """{unit: {(day, start minute): [session ids]}}: the main-session prompts each window was read from, the same
+    rows readings.py and blocks.py feed the model (user, chunk 0, main tier), so a reading leads back to its sessions."""
+    con = common.connect(scan, extract)
+    mins = "(cast(substr(ts_th, 12, 2) as int) * 60 + cast(substr(ts_th, 15, 2) as int))"
+    out = {}
+    for unit, span in (("day", 1440), ("3h", 180), ("1h", 60), ("15m", 15)):
+        out[unit] = {(d, int(m)): sids for d, m, sids in con.execute(f"""select substr(ts_th, 1, 10) d, ({mins} // {span}) * {span} AS m0,
+            list(distinct sid order by sid) from x where role = 'user' and chunk = 0 and tier = 'main' and ts_th <> '' group by 1, 2""").fetchall()}
+    return out
+
+
+def windows(rep, public, share, sess=None):
     """Every window reading, one compact row each: [day, start minute, type, top project, prompts, focus, friction,
-    lesson]. Lanes: blocks.json (3h) and blocks-1h.json on gb300, readings-<unit>-<lane>-<model>[-deep].json.
-    The share view keeps type, project and count, not the model's sentences; the public view keeps type and count."""
+    lesson, session ids]. Lanes: blocks.json (3h) and blocks-1h.json on gb300, readings-<unit>-<lane>-<model>[-deep].json.
+    The share view keeps type, project and count, not the model's sentences; the public view keeps type and count.
+    Session ids only in the private view (sess is None otherwise)."""
     lanes = {}
 
-    def row(day, m0, rd, shape):
+    def row(day, m0, rd, shape, unit):
         ty = rd.get("type") if rd.get("type") in TYPES else "mixed"
         txt = not (public or share)
         return [day, m0, ty, None if public else shape.get("top_project"), shape.get("prompts", 0),
-                rd.get("focus") if txt else None, rd.get("friction") if txt else None, rd.get("lesson") if txt else None]
+                rd.get("focus") if txt else None, rd.get("friction") if txt else None, rd.get("lesson") if txt else None,
+                (sess or {}).get(unit, {}).get((day, m0)) if sess else None]
 
     for f, unit in (("blocks.json", "3h"), ("blocks-1h.json", "1h")):
         if (rep / f).exists():
             b = json.loads((rep / f).read_text())
-            rows = [row(x["day"], x["h0"] * 60, x.get("reading") or {}, x.get("shape") or {}) for x in b["blocks"]]
+            rows = [row(x["day"], x["h0"] * 60, x.get("reading") or {}, x.get("shape") or {}, unit) for x in b["blocks"]]
             lanes[f"{unit} gb300"] = dict(unit=unit, host="gb300", model=b.get("model"), deep=False, built=b.get("built"),
                                           rows=sorted(rows, key=lambda r: (r[0], r[1])),
                                           summary=None if public else b.get("summary"))
@@ -278,7 +292,7 @@ def windows(rep, public, share):
         for w in r["windows"]:
             lab = w["window"]
             day, m0 = lab[:10], (int(lab[11:13]) * 60 + int(lab[14:16])) if len(lab) > 10 else 0
-            rows.append(row(day, m0, w.get("reading") or {}, w.get("shape") or {}))
+            rows.append(row(day, m0, w.get("reading") or {}, w.get("shape") or {}, r["unit"]))
         if len(rows) < 30:
             continue  # a trial run (--limit), not a lane
         lanes[f"{r['unit']} {lane}{' deep' if r.get('deep') else ''}"] = dict(
@@ -346,7 +360,8 @@ def main():
                 if a.public:
                     d["repos"] = []
         data["days"] = dd
-    lanes = windows(Path(a.extract).expanduser() / "report", a.public, a.share)
+    sess = None if (a.public or a.share) else window_sessions(Path(a.scan).expanduser(), Path(a.extract).expanduser())
+    lanes = windows(Path(a.extract).expanduser() / "report", a.public, a.share, sess)
     if lanes:  # blocks.py and readings.py: what each 3h/1h/15m window was, on gb300 and z.ai
         data["windows"] = lanes
     pp = Path(a.extract).expanduser() / "report" / "pictures.json"

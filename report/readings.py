@@ -174,6 +174,11 @@ def main():
         label = f"{d} {m0 // 60:02d}:{m0 % 60:02d}-{(m0 + span) // 60:02d}:{(m0 + span) % 60:02d}" if a.unit != "day" else d
         span_t = {"day": "one day", "3h": "one 3-hour block", "1h": "one hour", "15m": "15 minutes"}[a.unit]
         prompt = dy.PROMPT.format(span=span_t, day=label, nums=json.dumps(shape), lines=lines, agents=alines)
+        if a.unit == "15m":  # the day prompt's "the day" made 15-minute readings start "The day was focused on ..."
+            for w0, w1 in (("Describe the day", "Describe these 15 minutes"), ("the day's prompts", "these 15 minutes' prompts"),
+                           ("if the day stayed", "if these 15 minutes stayed"), ("the day was mostly about", "these 15 minutes were mostly about"),
+                           ("worked today", "worked in these 15 minutes")):
+                prompt = prompt.replace(w0, w1)
         if a.deep:
             prompt = prompt.replace("\nNumbers: ", DEEP + "\n\nNumbers: ", 1)
         jobs.append((label, shape, prompt))
