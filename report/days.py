@@ -123,7 +123,8 @@ def keep(unit, model, prompt, answer, secs):
     LOG.chmod(0o600)
 
 
-def ask(model, prompt, port=11447):
+def ask(model, prompt, port=11447, keys=None):
+    """keys: the answer keys to keep (KEYS by default; readings.py --deep adds friction and lesson)."""
     body = json.dumps({"model": model, "prompt": prompt, "stream": False, "format": "json", "think": False,
                        "options": {"temperature": 0.2, "num_ctx": 16384}}).encode()
     req = urllib.request.Request(f"http://127.0.0.1:{port}/api/generate", body, {"Content-Type": "application/json"})
@@ -140,7 +141,7 @@ def ask(model, prompt, port=11447):
             _reopen(port)
     try:
         j = json.loads(out)
-        return {k: j.get(k) for k in KEYS} | {"json_ok": True}
+        return {k: j.get(k) for k in (keys or KEYS)} | {"json_ok": True}
     except Exception:
         return {"en": out.strip()[:600], "th": "", "json_ok": False}
 
