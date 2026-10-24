@@ -65,7 +65,23 @@ Prompts agents wrote for other agents (project, start of text):
 """
 
 
+_TUN = {}  # port -> host, so ask() can reopen a tunnel that dropped mid-run
+
+
+def _reopen(port):
+    """An ssh tunnel can drop in a long run (seen 2026-10-24 after 825 of 13,724 windows): open it again."""
+    host, s = _TUN.get(port), socket.socket()
+    if not host or s.connect_ex(("127.0.0.1", port)) == 0:
+        s.close()
+        return
+    subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30",
+                      "-N", "-L", f"{port}:127.0.0.1:11434", host])
+    print(f"    tunnel to {host} reopened", flush=True)
+    time.sleep(3)
+
+
 def tunnel(host, model, port=11447):
+    _TUN[port] = host
     s = socket.socket()
     if s.connect_ex(("127.0.0.1", port)) == 0:  # something listens already: use it only if it is an ollama with the model
         s.close()
@@ -73,7 +89,8 @@ def tunnel(host, model, port=11447):
         if not any(m["name"].split(":")[0] == model.split(":")[0] for m in tags.get("models", [])):
             raise SystemExit(f"127.0.0.1:{port} is not an ollama holding {model}: pick another port")
         return None
-    p = subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-N", "-L", f"{port}:127.0.0.1:11434", host])
+    p = subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30",
+                          "-N", "-L", f"{port}:127.0.0.1:11434", host])
     for _ in range(50):
         time.sleep(0.2)
         s = socket.socket()
@@ -110,6 +127,7 @@ def ask(model, prompt, port=11447):
                 raise
             print(f"    retry {attempt + 1}: {ex.__class__.__name__}", flush=True)
             time.sleep(5 * (attempt + 1))
+            _reopen(port)
     try:
         j = json.loads(out)
         return {k: j.get(k) for k in KEYS} | {"json_ok": True}
