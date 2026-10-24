@@ -44,7 +44,7 @@ def window_input(con, d, m0, m1):
     cond = f"substr(x.ts_th, 1, 10) = ? and {mins} >= {m0} and {mins} < {m1}"
     rows = con.execute(f"""select substr(x.ts_th, 12, 5) AS hm, coalesce(ses.cat, x.cat) AS cat, x.text, x.key
                            from x left join ses using (sid) where x.role = 'user' and x.chunk = 0 and x.tier = 'main'
-                           and {cond} order by x.ts_th""", [d]).fetchall()
+                           and {cond} order by x.ts_th, x.key, cat, x.text""", [d]).fetchall()   # a full order: ties (same second, the merged homes) came back in any order, so the prompt and its cache hash changed run to run
     rows = [r for r in rows if len(r[2].strip()) >= 8]
     reps = Counter(r[3] for r in rows)
     seen, uniq = set(), []
@@ -53,7 +53,7 @@ def window_input(con, d, m0, m1):
             seen.add(r[3])
             uniq.append(r)
     cats = Counter(r[1] for r in rows)
-    agents = con.execute(f"""select coalesce(ses.cat, x.cat), any_value(x.text) from x left join ses using (sid)
+    agents = con.execute(f"""select coalesce(ses.cat, x.cat), min(x.text) from x left join ses using (sid)
                              where x.role = 'user' and x.chunk = 0 and x.tier <> 'main' and {cond} group by 1, x.key
                              order by 1, x.key limit 12""", [d]).fetchall()
     shape = dict(prompts=len(rows), distinct=len(uniq), loop_prompts=sum(n for n in reps.values() if n >= 3),
@@ -162,6 +162,7 @@ def main():
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--min", type=int, default=3)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--restamp", metavar="SINCE", help="give cached readings logged since SINCE (2026-10-24T14:40) the current prompt hash, then stop")
     a = ap.parse_args()
     t0 = time.time()
     lane, model = a.model.split(":", 1)
@@ -194,6 +195,28 @@ def main():
         if a.deep:
             prompt = prompt.replace("\nNumbers: ", DEEP + "\n\nNumbers: ", 1)
         jobs.append((label, shape, prompt))
+    if a.restamp:
+        # one-off after the tie-order fix: every prompt's hash moved, though a window read on today's data has not
+        # changed. A cached reading logged at or after --restamp (and not from today, which still grows) takes the
+        # new hash; the rest stay as they are and are read again.
+        last, mt = {}, a.model + (" deep" if a.deep else "")
+        for line in open(dy.LOG):
+            r = json.loads(line)
+            if r.get("model") == mt:
+                last[r["unit"]] = max(last.get(r["unit"], ""), r["at"])
+        today, kept, stale, ok = time.strftime("%Y-%m-%d"), 0, 0, 0
+        for label, _, prompt in jobs:
+            h, got = hashlib.md5((a.model + prompt).encode()).hexdigest(), cache.get(label)
+            if not got or got.get("h") == h:
+                ok += bool(got)
+            elif last.get(f"{label} {a.unit}", "") >= a.restamp and not label.startswith(today) and (not a.deep or "friction" in got):
+                got["h"], kept = h, kept + 1
+            else:
+                stale += 1
+        cache_f.write_text(json.dumps(cache, ensure_ascii=False))
+        cache_f.chmod(0o600)
+        print(f"readings: restamp {tag}: {ok:,} already current · {kept:,} restamped (read since {a.restamp}) · {stale:,} left to read again")
+        return
     lock = threading.Lock()
     done = 0
 

@@ -152,7 +152,7 @@ def day_input(con, d, h0=0, h1=24):
     day = f"substr(x.ts_th, 1, 10) = ? and cast(substr(x.ts_th, 12, 2) as int) >= {int(h0)} and cast(substr(x.ts_th, 12, 2) as int) < {int(h1)} and true"
     rows = con.execute(f"""select substr(x.ts_th, 12, 5) AS hm, coalesce(ses.cat, x.cat) AS cat, x.text, x.key
                            from x left join ses using (sid) where x.role = 'user' and x.chunk = 0 and x.tier = 'main'
-                           and {day} order by x.ts_th""", [d]).fetchall()
+                           and {day} order by x.ts_th, x.key, cat, x.text""", [d]).fetchall()   # a full order: ties (same second, the merged homes) came back in any order
     rows = [r for r in rows if len(r[2].strip()) >= 8]
     reps = Counter(r[3] for r in rows)
     loops = sum(n for n in reps.values() if n >= 3)
@@ -163,9 +163,9 @@ def day_input(con, d, h0=0, h1=24):
             uniq.append(r)
     cats = Counter(r[1] for r in rows)
     switches = sum(1 for a, b in zip(rows, rows[1:]) if a[1] != b[1])
-    agents = con.execute(f"""select coalesce(ses.cat, x.cat), any_value(x.text) from x left join ses using (sid)
+    agents = con.execute(f"""select coalesce(ses.cat, x.cat), min(x.text) from x left join ses using (sid)
                              where x.role = 'user' and x.chunk = 0 and x.tier <> 'main' and {day} group by 1, x.key
-                             order by random() limit 12""", [d]).fetchall()
+                             order by md5(x.key) limit 12""", [d]).fetchall()
     shape = dict(prompts=len(rows), distinct=len(uniq), loop_prompts=loops, projects=len(cats),
                  top_project=cats.most_common(1)[0][0] if cats else None,
                  top_share=round(cats.most_common(1)[0][1] / len(rows), 2) if rows else 0,
