@@ -15,6 +15,7 @@ import argparse
 import hashlib
 import json
 import re
+import signal
 import subprocess
 import threading
 import time
@@ -142,7 +143,13 @@ def ask_zai(model, prompt, keys):
     return got | {"json_ok": True, "think": True}
 
 
+def _stop(*_):
+    raise KeyboardInterrupt
+
+
 def main():
+    # a kill (SIGTERM) runs the finally below like Ctrl-C does, so the cache is saved and the next run resumes
+    signal.signal(signal.SIGTERM, _stop)
     ap = argparse.ArgumentParser()
     ap.add_argument("--unit", default="15m", choices=list(UNITS))
     ap.add_argument("--model", default="zai:glm-5.3")
