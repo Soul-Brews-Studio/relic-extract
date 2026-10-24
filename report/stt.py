@@ -13,7 +13,9 @@ Dictated text and prompt text stay in the private files; stt.json carries counts
 private examples per side for the private view.
 """
 
+import argparse
 import json
+import os
 import re
 import sqlite3
 import time
@@ -62,6 +64,10 @@ def shape(s):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--export", help="write labelled.jsonl and all.jsonl here (for stt_train.py on gb300) and stop")
+    ap.add_argument("--scores", help="scores.jsonl from stt_train.py: use the fine-tuned model's scores instead of the n-gram model")
+    args = ap.parse_args()
     t0 = time.time()
     con = common.connect(HOME / ".relic-scan", HOME / ".relic-extract")
     prompts = con.execute("""select msgkey, any_value(x.ts_th) ts, any_value(coalesce(ses.cat, x.cat)) cat, any_value(x.tier) tier,
@@ -92,6 +98,21 @@ def main():
           [(p, 0) for p in P if lo <= p["t"] <= hi and p["tier"] == "main" and p["key"] not in spoken and len(p["text"]) >= 12]
     texts, y = [p["text"][:2000] for p, _ in lab], np.array([v for _, v in lab])
     print(f"stt: labelled {y.sum():,} spoken / {(y == 0).sum():,} typed", flush=True)
+    if args.export:
+        d = Path(args.export).expanduser()
+        d.mkdir(parents=True, exist_ok=True)
+        os.chmod(d, 0o700)
+        with open(d / "labelled.jsonl", "w") as f:
+            for p, v in lab:
+                f.write(json.dumps(dict(key=p["key"], ts=p["t"].isoformat(), y=int(v), text=p["raw"][:2000]), ensure_ascii=False) + "\n")
+        with open(d / "all.jsonl", "w") as f:
+            for p in P:
+                if p["tier"] == "main" and len(p["text"]) >= 12:
+                    f.write(json.dumps(dict(key=p["key"], text=p["raw"][:2000]), ensure_ascii=False) + "\n")
+        for f in d.iterdir():
+            f.chmod(0o600)
+        print(f"stt: exported -> {d}")
+        return
 
     # 3. model + cross-validation
     vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(1, 4), min_df=3, max_features=200_000, sublinear_tf=True)
@@ -110,10 +131,18 @@ def main():
     # 4. score every main-session prompt of the year
     main_p = [p for p in P if p["tier"] == "main" and len(p["text"]) >= 12]
     score = np.zeros(len(main_p))
-    for i in range(0, len(main_p), 20000):
-        part = main_p[i: i + 20000]
-        Xa = hstack([vec.transform([p["text"][:2000] for p in part]), csr_matrix(np.array([shape(p["raw"][:2000]) for p in part]))]).tocsr()
-        score[i: i + len(part)] = clf.predict_proba(Xa)[:, 1]
+    if args.scores:  # the fine-tuned model's scores (stt_train.py) and its held-out threshold
+        sp = Path(args.scores).expanduser()
+        got = {r["key"]: r["score"] for r in map(json.loads, open(sp))}
+        score = np.array([got.get(p["key"], 0.0) for p in main_p])
+        tm = json.loads((sp.parent / "metrics.json").read_text())
+        th, cv = tm["best"]["threshold"], tm["best"] | dict(model=tm["model"], baseline_same_split=tm["baseline"], ngram_cv_all=cv)
+        print(f"stt: fine-tuned scores for {sum(p['key'] in got for p in main_p):,} prompts, threshold {th}", flush=True)
+    else:
+        for i in range(0, len(main_p), 20000):
+            part = main_p[i: i + 20000]
+            Xa = hstack([vec.transform([p["text"][:2000] for p in part]), csr_matrix(np.array([shape(p["raw"][:2000]) for p in part]))]).tocsr()
+            score[i: i + len(part)] = clf.predict_proba(Xa)[:, 1]
     month, proj = defaultdict(lambda: [0, 0, 0]), defaultdict(lambda: [0, 0])
     for p, s in zip(main_p, score):
         m = p["t"].astimezone(BKK).strftime("%Y-%m")
