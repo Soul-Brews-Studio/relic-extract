@@ -162,6 +162,7 @@ def main():
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--min", type=int, default=3)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--sample", type=int, default=0, help="read N windows spread evenly over the year (a model trial)")
     ap.add_argument("--restamp", metavar="SINCE", help="give cached readings logged since SINCE (2026-10-24T14:40) the current prompt hash, then stop")
     a = ap.parse_args()
     t0 = time.time()
@@ -173,6 +174,8 @@ def main():
     units = con.execute(f"""select substr(ts_th, 1, 10) d, ((cast(substr(ts_th, 12, 2) as int) * 60 + cast(substr(ts_th, 15, 2) as int)) // {span}) * {span} AS m0,
                             count(distinct msgkey) n from x where role = 'user' and chunk = 0 and tier = 'main' and ts_th <> ''
                             group by 1, 2 having count(distinct msgkey) >= ? order by 1, 2""", [a.min]).fetchall()
+    if a.sample:  # every k-th window over the whole span, the same ones each run (a model trial against the lanes)
+        units = units[:: max(1, len(units) // a.sample)][: a.sample]
     if a.limit:
         units = units[: a.limit]
     print(f"readings: {len(units):,} windows of {a.unit} (>= {a.min} prompts) · {a.model} · deep={a.deep} · {time.time() - t0:.0f}s", flush=True)
@@ -263,7 +266,7 @@ def main():
         if tun:
             tun.terminate()
     out.sort(key=lambda r: r["window"])
-    dst = OUT / f"readings-{tag}.json"
+    dst = OUT / f"{'trial' if a.sample else 'readings'}-{tag}.json"   # a --sample trial is not a lane: build.py reads readings-*.json
     dst.write_text(json.dumps(dict(built=time.strftime("%Y-%m-%d %H:%M"), unit=a.unit, model=a.model, deep=a.deep,
                                    windows=out), ensure_ascii=False))
     dst.chmod(0o600)
