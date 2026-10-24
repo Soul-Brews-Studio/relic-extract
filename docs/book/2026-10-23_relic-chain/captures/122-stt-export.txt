@@ -1,0 +1,7 @@
+$ rg -n 'neg-per-pos|cut = |w = torch|best is None' report/stt_train.py
+6:--neg-per-pos x the spoken count (random, fixed seed) and the loss weights the spoken side up to match. The split is
+58:    ap.add_argument("--neg-per-pos", type=int, default=30)
+71:    cut = lambda xs: (xs[: int(len(xs) * 0.8)], xs[int(len(xs) * 0.8):])
+87:    w = torch.tensor([1.0, len(ntr) / max(len(ptr), 1)], device="cuda")
+110:        if best is None or m["ap"] > best["ap"]:
+(exit 0 · 0.0 s)

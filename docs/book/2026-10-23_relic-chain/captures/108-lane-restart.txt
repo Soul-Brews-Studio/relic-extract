@@ -1,0 +1,4 @@
+$ herdr pane read w12:p17   (the gb300 queue, after the fixes)
+== report/readings.py --unit 15m --model gb300:qwen3:14b --deep --min 3 · run 1 from 14:54, stops at Sun 08:00
+readings: 15,143 windows of 15m (>= 3 prompts) · gb300:qwen3:14b · deep=True · 3s
+(exit 0 · 0.0 s)

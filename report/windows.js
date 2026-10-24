@@ -11,6 +11,18 @@ const fmtI = (v) => Number(v).toLocaleString("en-US");
 const sids = (a) => a.slice(0, 4).map((x) => x.slice(0, 8)).join(" ") + (a.length > 4 ? ` +${a.length - 4}` : "");
 const hm = (m) => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
 const SPAN = { "3h": 180, "1h": 60, "15m": 15, day: 1440 };
+// The day's top project against a lane's windows, one rule everywhere (table, paragraph, blocks.py): on days with 3+
+// windows, the share of a day's windows its top project leads, averaged over those days; and how many different
+// projects lead a window on such a day. Windows with no project are left out of both.
+function leadStats(rows, dayTop) {
+  const by = {};
+  rows.forEach((r) => { (by[r[0]] = by[r[0]] || []).push(r); });
+  const days = Object.entries(by).filter(([d, rs]) => rs.length >= 3 && dayTop[d]).map(([d, rs]) => [d, rs.filter((r) => r[3])]).filter(([, rs]) => rs.length);
+  if (!days.length) return null;
+  return { lead: days.reduce((a, [d, rs]) => a + rs.filter((r) => r[3] === dayTop[d]).length / rs.length, 0) / days.length,
+    fp: days.reduce((a, [, rs]) => a + new Set(rs.map((r) => r[3])).size, 0) / days.length, days: days.length };
+}
+const dayTops = () => Object.fromEntries((DATA.days ? DATA.days.days : []).map((d) => [d.day, d.shape ? d.shape.top_project : null]));
 const laneOrder = (k) => ["3h", "1h", "15m", "day"].indexOf(WIN[k].unit) * 10 + (WIN[k].host === "gb300" ? 0 : 1);
 
 function winGrid(parent, lane) {
@@ -87,7 +99,8 @@ function winSection() {
     if (b3 && b3.summary) {
       const S = b3.summary;
       h("h3", null, t("win.vs.h"), s);
-      h("p", null, t("win.vs", { n: fmtI(S.blocks), d: fmtN(S.days), lead: fmtP(S.day_top_leads), fp: S.mean_focus_projects,
+      const ls = leadStats(b3.rows, dayTops()) || { lead: S.day_top_leads, fp: S.mean_focus_projects };
+      h("p", null, t("win.vs", { n: fmtI(S.blocks), d: fmtN(S.days), lead: fmtP(ls.lead), fp: ls.fp.toFixed(2),
         dt: (S.day_types[0] || [])[1], dtn: fmtP(((S.day_types[0] || [])[1] || 0) / S.days),
         bt: fmtP(((S.types[0] || [])[1] || 0) / S.blocks) }), s);
     }
@@ -104,7 +117,7 @@ function winCompare(parent) {
   const order = (k) => ["day", "3h", "1h", "15m"].indexOf(L[k].unit) * 10 + (L[k].host === "gb300" ? 0 : 1) + (L[k].deep ? 2 : 0);
   const keys = Object.keys(L).filter((k) => L[k].rows.length).sort((a, b) => order(a) - order(b));
   if (keys.length < 2) return;
-  const dayTop = Object.fromEntries((DATA.days ? DATA.days.days : []).map((d) => [d.day, d.shape ? d.shape.top_project : null]));
+  const dayTop = dayTops();
   h("h3", null, t("win.cmp.h"), parent);
   const tbl = h("table", "topics", null, parent), hr = h("tr", null, null, h("thead", null, null, tbl)), tb = h("tbody", null, null, tbl);
   t("win.cmp.cols").split(",").forEach((c) => h("th", null, c, hr));
@@ -112,10 +125,8 @@ function winCompare(parent) {
     const R = L[k].rows, n = R.length, by = {};
     R.forEach((r) => { (by[r[0]] = by[r[0]] || []).push(r); });
     const share = (...ty) => fmtP(R.filter((r) => ty.includes(r[2])).length / n);
-    const full = Object.values(by).filter((rs) => rs.length >= 3).flat().filter((r) => r[3] && dayTop[r[0]]);
-    const named = Object.values(by).filter((rs) => rs.some((r) => r[3]));
-    const lead = L[k].unit === "day" || !full.length ? "—" : fmtP(full.filter((r) => r[3] === dayTop[r[0]]).length / full.length);
-    const fp = L[k].unit === "day" || !named.length ? "—" : (named.reduce((a, rs) => a + new Set(rs.map((r) => r[3]).filter(Boolean)).size, 0) / named.length).toFixed(2);
+    const ls = L[k].unit === "day" ? null : leadStats(R, dayTop);
+    const lead = ls ? fmtP(ls.lead) : "—", fp = ls ? ls.fp.toFixed(2) : "—";
     const tr = h("tr", null, null, tb);
     [k, fmtI(n), fmtI(Object.keys(by).length), share("build"), share("ops"), share("fix"), share("research", "writing"), share("mixed", "planning"), lead, fp]
       .forEach((v, i) => h("td", i ? "num" : null, v, tr));

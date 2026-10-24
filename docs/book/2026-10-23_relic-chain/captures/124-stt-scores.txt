@@ -1,0 +1,22 @@
+$ uv run … python report/stt.py --scores stt-data/scores.jsonl
+stt: 284,840 prompts · 429 Wispr dictations 2026-08-21 .. 2026-10-24 · 18s
+stt: 311 dictations found in 271 prompts
+stt: labelled 271 spoken / 55,678 typed
+stt: 5-fold CV {'auc': 0.989, 'ap': 0.271, 'threshold': 0.5, 'precision': 0.273, 'recall': 0.753, 'f1': 0.401, 'spoken': 271, 'typed': 55678}
+stt: fine-tuned scores for 159,411 prompts, threshold 0.8
+stt: 9,213 of 200,711 prompts read as spoken (threshold 0.80) · 90s -> /Users/beta/.relic-extract/report/stt.json
+  2025-09     202 prompts      0 spoken (0%)  known 0
+  2025-10   2,072 prompts      0 spoken (0%)  known 0
+  2025-11     334 prompts      1 spoken (0%)  known 0
+  2025-12     122 prompts      1 spoken (1%)  known 0
+  2026-01     792 prompts     14 spoken (2%)  known 0
+  2026-02   6,434 prompts    145 spoken (2%)  known 0
+  2026-03   7,766 prompts    294 spoken (4%)  known 0
+  2026-04  15,757 prompts     63 spoken (0%)  known 0
+  2026-05  25,321 prompts    276 spoken (1%)  known 0
+  2026-06  37,276 prompts  3,634 spoken (10%)  known 0
+  2026-07  33,485 prompts  3,716 spoken (11%)  known 0
+  2026-08  25,953 prompts    245 spoken (1%)  known 11
+  2026-09  20,404 prompts    229 spoken (1%)  known 54
+  2026-10  24,793 prompts    595 spoken (2%)  known 200
+(exit 0 · 92.3 s)

@@ -15,6 +15,7 @@ import argparse
 import hashlib
 import json
 import re
+import signal
 import subprocess
 import threading
 import time
@@ -142,7 +143,18 @@ def ask_zai(model, prompt, keys):
     return got | {"json_ok": True, "think": True}
 
 
+def _stop(*_):
+    # the first signal stops the run; ignore the rest (the pane closing sends SIGHUP right after a TERM), or a second
+    # one lands inside the cache save in `finally` and the save is lost
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    raise KeyboardInterrupt
+
+
 def main():
+    # a kill (SIGTERM) runs the finally below like Ctrl-C does, so the cache is saved and the next run resumes
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGHUP, _stop)  # the pane closing (herdr pane close) sends SIGHUP
     ap = argparse.ArgumentParser()
     ap.add_argument("--unit", default="15m", choices=list(UNITS))
     ap.add_argument("--model", default="zai:glm-5.3")
@@ -188,37 +200,43 @@ def main():
     def one(job):
         label, shape, prompt = job
         h = hashlib.md5((a.model + prompt).encode()).hexdigest()
-        if cache.get(label, {}).get("h") == h:
-            return label, shape, cache[label], False
+        got = cache.get(label, {})
+        # a deep reading cached without friction/lesson (days.ask dropped them before 2026-10-24 14:40) is read again
+        if got.get("h") == h and (not a.deep or "friction" in got):
+            return label, shape, got, False
         t1 = time.time()
-        ans = ask_zai(model, prompt, keys) if lane == "zai" else dy.ask(model, prompt)
+        ans = ask_zai(model, prompt, keys) if lane == "zai" else dy.ask(model, prompt, keys=keys)
         ans["secs"] = round(time.time() - t1, 1)
         dy.keep(f"{label} {a.unit}", a.model + (" deep" if a.deep else ""), prompt, ans, ans["secs"])
         return label, shape, dict(h=h, **ans), True
 
     tun = dy.tunnel("gb300", model) if lane == "gb300" else None
     out = []
+    # no `with`: leaving a with-block waits for every queued window (hours), so a kill never reached the save
+    ex = ThreadPoolExecutor(max_workers=a.workers if lane == "zai" else 1)
     try:
-        with ThreadPoolExecutor(max_workers=a.workers if lane == "zai" else 1) as ex:
-            futs = [ex.submit(one, j) for j in jobs]
-            for f in as_completed(futs):
-                try:
-                    label, shape, ans, new = f.result()
-                except Exception as e:
-                    print(f"  failed: {e.__class__.__name__}: {str(e)[:120]}", flush=True)
-                    continue
-                with lock:
-                    cache[label] = ans
-                    out.append(dict(window=label, shape=shape, reading={k: ans.get(k) for k in keys}))
-                    done += 1
-                    if new:
-                        print(f"  {label} · {shape['prompts']} prompts · {shape['projects']} projects · {ans.get('secs')}s · "
-                              f"{ans.get('type')} · {str(ans.get('focus'))[:70]}", flush=True)
-                    if done % 25 == 0:
-                        cache_f.write_text(json.dumps(cache, ensure_ascii=False))
+        futs = [ex.submit(one, j) for j in jobs]
+        for f in as_completed(futs):
+            try:
+                label, shape, ans, new = f.result()
+            except Exception as e:
+                print(f"  failed: {e.__class__.__name__}: {str(e)[:120]}", flush=True)
+                continue
+            with lock:
+                cache[label] = ans
+                out.append(dict(window=label, shape=shape, reading={k: ans.get(k) for k in keys}))
+                done += 1
+                if new:
+                    print(f"  {label} · {shape['prompts']} prompts · {shape['projects']} projects · {ans.get('secs')}s · "
+                          f"{ans.get('type')} · {str(ans.get('focus'))[:70]}"
+                          + (f" · friction: {str(ans.get('friction'))[:50]}" if a.deep else ""), flush=True)
+                if done % 25 == 0:
+                    cache_f.write_text(json.dumps(cache, ensure_ascii=False))
     finally:
+        ex.shutdown(wait=False, cancel_futures=True)
         cache_f.write_text(json.dumps(cache, ensure_ascii=False))
         cache_f.chmod(0o600)
+        dy._TUN.clear()  # a request still in flight must not reopen the tunnel after we stop
         if tun:
             tun.terminate()
     out.sort(key=lambda r: r["window"])

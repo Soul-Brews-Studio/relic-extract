@@ -1,0 +1,9 @@
+$ what relic4-scan answered about the jump, 2026-10-24 (+07)
+-- arrived 2026-10-24T07:51:02Z
+From relic4-scan: the jump is real data, not a counting change: I merged every other .claude 
+home into ~/.claude/projects (black's 17 GB home, white, mba, in-home projects-* folders, neo 
+archives) and nat's own transcripts via /Users/Shared/nat-export (13:52 and 14:34 runs); it 
+is settled now (merge done, nat's separate chain stopped), so from here it only grows with 
+live use. The .before-nat-incident dir is the bad 08:11 index, kept as-is, not the old good 
+one.
+(exit 0 · 0.2 s)

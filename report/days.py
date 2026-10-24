@@ -15,7 +15,10 @@ answers type, focus, distraction, work, agents, pattern, and two-sentence summar
 import argparse
 import hashlib
 import json
+import os
 import re
+import shutil
+import signal
 import socket
 import subprocess
 import time
@@ -68,14 +71,23 @@ Prompts agents wrote for other agents (project, start of text):
 _TUN = {}  # port -> host, so ask() can reopen a tunnel that dropped mid-run
 
 
+def _ssh_tunnel(host, port):
+    """autossh when installed (it restarts ssh by itself when the link drops; -M 0 = watch with ServerAlive, no
+    monitor port), else plain ssh; either way ask() reopens the port if it is still gone."""
+    opts = ["-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3",
+            "-N", "-L", f"{port}:127.0.0.1:11434", host]
+    if shutil.which("autossh"):
+        return subprocess.Popen(["autossh", "-M", "0", *opts], env={**os.environ, "AUTOSSH_GATETIME": "0"})
+    return subprocess.Popen(["ssh", *opts])
+
+
 def _reopen(port):
     """An ssh tunnel can drop in a long run (seen 2026-10-24 after 825 of 13,724 windows): open it again."""
     host, s = _TUN.get(port), socket.socket()
     if not host or s.connect_ex(("127.0.0.1", port)) == 0:
         s.close()
         return
-    subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30",
-                      "-N", "-L", f"{port}:127.0.0.1:11434", host])
+    _ssh_tunnel(host, port)
     print(f"    tunnel to {host} reopened", flush=True)
     time.sleep(3)
 
@@ -89,8 +101,7 @@ def tunnel(host, model, port=11447):
         if not any(m["name"].split(":")[0] == model.split(":")[0] for m in tags.get("models", [])):
             raise SystemExit(f"127.0.0.1:{port} is not an ollama holding {model}: pick another port")
         return None
-    p = subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30",
-                          "-N", "-L", f"{port}:127.0.0.1:11434", host])
+    p = _ssh_tunnel(host, port)
     for _ in range(50):
         time.sleep(0.2)
         s = socket.socket()
@@ -113,7 +124,8 @@ def keep(unit, model, prompt, answer, secs):
     LOG.chmod(0o600)
 
 
-def ask(model, prompt, port=11447):
+def ask(model, prompt, port=11447, keys=None):
+    """keys: the answer keys to keep (KEYS by default; readings.py --deep adds friction and lesson)."""
     body = json.dumps({"model": model, "prompt": prompt, "stream": False, "format": "json", "think": False,
                        "options": {"temperature": 0.2, "num_ctx": 16384}}).encode()
     req = urllib.request.Request(f"http://127.0.0.1:{port}/api/generate", body, {"Content-Type": "application/json"})
@@ -130,7 +142,7 @@ def ask(model, prompt, port=11447):
             _reopen(port)
     try:
         j = json.loads(out)
-        return {k: j.get(k) for k in KEYS} | {"json_ok": True}
+        return {k: j.get(k) for k in (keys or KEYS)} | {"json_ok": True}
     except Exception:
         return {"en": out.strip()[:600], "th": "", "json_ok": False}
 
@@ -165,7 +177,19 @@ def day_input(con, d, h0=0, h1=24):
     return shape, lines, alines
 
 
+def on_stop():
+    """A kill (SIGTERM, or SIGHUP when the pane closes) runs the finally blocks like Ctrl-C, so the cache is saved and
+    the next run resumes (the gb300 queue stops each lane at 08:00)."""
+    def _stop(*_):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second signal would land inside the save
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGHUP, _stop)
+
+
 def main():
+    on_stop()
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--model", default="qwen3:14b")
