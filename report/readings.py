@@ -163,6 +163,7 @@ def main():
     ap.add_argument("--min", type=int, default=3)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--sample", type=int, default=0, help="read N windows spread evenly over the year (a model trial)")
+    ap.add_argument("--windows", metavar="CACHE", help="read only the windows in this readings-cache file (the same trial set for every model)")
     ap.add_argument("--restamp", metavar="SINCE", help="give cached readings logged since SINCE (2026-10-24T14:40) the current prompt hash, then stop")
     a = ap.parse_args()
     t0 = time.time()
@@ -220,6 +221,10 @@ def main():
         cache_f.chmod(0o600)
         print(f"readings: restamp {tag}: {ok:,} already current · {kept:,} restamped (read since {a.restamp}) · {stale:,} left to read again")
         return
+    if a.windows:  # --sample drifts as live windows arrive; a later trial reads the first trial's windows instead
+        want = set(json.loads(Path(a.windows).expanduser().read_text()))
+        jobs = [j for j in jobs if j[0] in want]
+        print(f"readings: {len(jobs):,} windows from {Path(a.windows).name}", flush=True)
     lock = threading.Lock()
     done = 0
 
@@ -266,7 +271,7 @@ def main():
         if tun:
             tun.terminate()
     out.sort(key=lambda r: r["window"])
-    dst = OUT / f"{'trial' if a.sample else 'readings'}-{tag}.json"   # a --sample trial is not a lane: build.py reads readings-*.json
+    dst = OUT / f"{'trial' if a.sample or a.windows else 'readings'}-{tag}.json"   # a --sample trial is not a lane: build.py reads readings-*.json
     dst.write_text(json.dumps(dict(built=time.strftime("%Y-%m-%d %H:%M"), unit=a.unit, model=a.model, deep=a.deep,
                                    windows=out), ensure_ascii=False))
     dst.chmod(0o600)

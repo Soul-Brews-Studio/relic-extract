@@ -15,6 +15,7 @@ from itertools import combinations
 from pathlib import Path
 
 OUT = Path.home() / ".relic-extract" / "report"
+TYPES = {"build", "fix", "research", "ops", "writing", "planning", "mixed"}
 
 
 def main():
@@ -30,7 +31,7 @@ def main():
         secs = [r["secs"] for r in rs if r.get("secs") is not None]
         ty = Counter(r.get("type") for r in rs)
         th = sum(bool((r.get("th") or "").strip()) for r in rs)
-        print(f"  {t:<34} json ok {sum(bool(r.get('json_ok')) for r in rs) / len(rs):4.0%} · median {statistics.median(secs) if secs else 0:5.1f} s"
+        print(f"  {t:<34} json ok {sum(bool(r.get('json_ok')) for r in rs) / len(rs):4.0%} · type ok {sum(r.get('type') in TYPES for r in rs) / len(rs):4.0%} · median {statistics.median(secs) if secs else 0:5.1f} s"
               f" · Thai {th / len(rs):4.0%} · en {statistics.median(len(r.get('en') or '') for r in rs):4.0f} chars · "
               + " ".join(f"{k} {v / len(rs):.0%}" for k, v in ty.most_common(6)))
     for x, y in combinations(a.tags, 2):
