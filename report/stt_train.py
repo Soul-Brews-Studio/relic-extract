@@ -1,6 +1,7 @@
 """Fine-tune a spoken-vs-typed classifier on gb300 (GPU): BAAI/bge-m3 (multilingual, Thai) + a classification head.
 
     python stt_train.py --data ~/stt-train        # labelled.jsonl + all.jsonl from `stt.py --export`
+    python stt_train.py --data ~/stt-train --score-only   # the kept model/ scores a new all.jsonl (no training)
 
 Labels are Wispr Flow's: 263 spoken prompts against ~52k typed ones from the same weeks. The typed side is cut to
 --neg-per-pos x the spoken count (random, fixed seed) and the loss weights the spoken side up to match. The split is
@@ -60,9 +61,21 @@ def main():
     ap.add_argument("--bs", type=int, default=32)
     ap.add_argument("--lr", type=float, default=2e-5)
     ap.add_argument("--maxlen", type=int, default=256)
+    ap.add_argument("--score-only", action="store_true", help="score all.jsonl with the kept model/, keep metrics.json")
     a = ap.parse_args()
     t0 = time.time()
     d = Path(a.data).expanduser()
+    if a.score_only:
+        tok = AutoTokenizer.from_pretrained(d / "model")
+        model = AutoModelForSequenceClassification.from_pretrained(d / "model").cuda()
+        allp = load(d / "all.jsonl")
+        sc = predict(model, tok, [r["text"] for r in allp], maxlen=a.maxlen)
+        with open(d / "scores.jsonl", "w") as f:
+            for r, s in zip(allp, sc):
+                f.write(json.dumps(dict(key=r["key"], score=round(float(s), 4))) + "\n")
+        th = json.loads((d / "metrics.json").read_text())["best"]["threshold"]
+        print(f"stt-train: scored {len(allp):,} prompts with the kept model · {int((sc >= th).sum()):,} at or above {th} · {time.time() - t0:.0f}s")
+        return
     rng = random.Random(7)
     lab = load(d / "labelled.jsonl")
     pos, neg = [r for r in lab if r["y"] == 1], [r for r in lab if r["y"] == 0]
