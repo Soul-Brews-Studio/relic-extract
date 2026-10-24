@@ -1,0 +1,24 @@
+$ sed -n '/^_TUN/,/time.sleep(3)/p' report/days.py
+_TUN = {}  # port -> host, so ask() can reopen a tunnel that dropped mid-run
+
+
+def _ssh_tunnel(host, port):
+    """autossh when installed (it restarts ssh by itself when the link drops; -M 0 = watch with ServerAlive, no
+    monitor port), else plain ssh; either way ask() reopens the port if it is still gone."""
+    opts = ["-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3",
+            "-N", "-L", f"{port}:127.0.0.1:11434", host]
+    if shutil.which("autossh"):
+        return subprocess.Popen(["autossh", "-M", "0", *opts], env={**os.environ, "AUTOSSH_GATETIME": "0"})
+    return subprocess.Popen(["ssh", *opts])
+
+
+def _reopen(port):
+    """An ssh tunnel can drop in a long run (seen 2026-10-24 after 825 of 13,724 windows): open it again."""
+    host, s = _TUN.get(port), socket.socket()
+    if not host or s.connect_ex(("127.0.0.1", port)) == 0:
+        s.close()
+        return
+    _ssh_tunnel(host, port)
+    print(f"    tunnel to {host} reopened", flush=True)
+    time.sleep(3)
+(exit 0 · 0.0 s)

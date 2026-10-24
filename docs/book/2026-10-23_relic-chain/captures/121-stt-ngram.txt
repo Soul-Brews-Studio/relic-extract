@@ -1,0 +1,23 @@
+$ uv run … python report/stt.py   (as its pane reported)
+-- arrived 2026-10-24T02:40:18Z
+PANE w12:p13 stt rc=0
+stt: 210,866 prompts · 420 Wispr dictations 2026-08-21 .. 2026-10-23 · 14s
+stt: 303 dictations found in 263 prompts
+stt: labelled 263 spoken / 51,890 typed
+stt: 5-fold CV {'auc': 0.989, 'ap': 0.26, 'threshold': 0.57, 'precision': 0.285, 'recall': 0.73, 'f1': 0.41, 'spoken': 263, 'typed': 51890}
+stt: 8,699 of 160,478 prompts read as spoken (threshold 0.57) · 115s -> /Users/beta/.relic-extract/report/stt.json
+  2025-09     202 prompts      0 spoken (0%)  known 0
+  2025-10   2,072 prompts      0 spoken (0%)  known 0
+  2025-11     334 prompts      1 spoken (0%)  known 0
+  2025-12     122 prompts      1 spoken (1%)  known 0
+  2026-01     386 prompts     12 spoken (3%)  known 0
+  2026-02   5,564 prompts    123 spoken (2%)  known 0
+  2026-03   7,476 prompts    255 spoken (3%)  known 0
+  2026-04  13,143 prompts     36 spoken (0%)  known 0
+  2026-05  20,569 prompts    293 spoken (1%)  known 0
+  2026-06  24,139 prompts  3,802 spoken (16%)  known 0
+  2026-07  23,063 prompts  3,269 spoken (14%)  known 0
+  2026-08  19,120 prompts    205 spoken (1%)  known 10
+  2026-09  20,358 prompts    115 spoken (1%)  known 54
+  2026-10  23,930 prompts    587 spoken (2%)  known 192
+(exit 0 · 0.2 s)

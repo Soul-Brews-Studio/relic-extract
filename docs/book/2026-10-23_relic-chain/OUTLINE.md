@@ -83,3 +83,48 @@ proof: captures 60, 61, 90
   (DuckDB reserved aliases; port 11435 was the ANE embed server; a fixed cosine 0.80 gave ~0%; ego scripts with
   node:fs printed nothing; an ssh drop killed a blocking pull; v1 day readings said "several projects")
 proof: D2 (from the session's own errors), captures 91, 92
+
+## ภาค 4 — วันที่สอง (2026-10-24): อ่านละเอียดขึ้น เทียบสองโมเดล และงานที่ต้องรอดข้ามคืน
+
+### บทที่ 9: อ่านทีละช่วง — 3 ชั่วโมง 1 ชั่วโมง 15 นาที  (images: 100-readings-help, 101-blocks-3h, 102-blocks-1h, 103-prompt-15m, 104-deep-keys, 105-deep-reading, 106-window-row, 107-progress, S6-page)
+- 9.1 readings.py: one script, four grains (day, 3h, 1h, 15m), two hosts (gb300, z.ai), --deep adds friction + lesson
+- 9.2 the 3-hour lane and the 1-hour lane, as their panes reported (blocks.py)
+- 9.3 "The day was focused on…" in a 15-minute reading: the day prompt leaked; the 15m prompt says "these 15 minutes"
+- 9.4 --deep: friction and lesson (and the bug: the gb300 path kept only the day keys — see chapter 12)
+- 9.5 one 15-minute window read deep
+- 9.6 every window leads back to its sessions: session ids on the page (private view only)
+- 9.7 how far the lanes are (progress.py) + the grid on the page (S6)
+proof: captures 100-107, shot S6
+
+### บทที่ 10: สองโมเดล อ่านช่วงเดียวกัน  (images: D3-lanes, 110-build-report, 111-lanes-table, 112-lanes-agree, 113-lane-speed, S7-page)
+- 10.1 the lanes (diagram): which model read which grain, how fast
+- 10.2 build the page with every lane
+- 10.3 the table: type mix per lane, how often the day's top project leads a window, projects leading a day
+- 10.4 one rule for "leads": the table and the paragraph used two definitions (50%/3.06 vs 51%/3.32); now one
+- 10.5 same windows, two models: they agree on half the days; gb300 says build where z.ai says mixed
+- 10.6 seconds per answer: gb300 one at a time vs z.ai 4 workers
+- 10.7 the table on the page (S7)
+proof: D3, captures 110-113, shot S7
+
+### บทที่ 11: พูดหรือพิมพ์ — model จาก Wispr Flow  (images: D4-stt, 120-wispr, 121-stt-ngram, 122-stt-export, 123-stt-train, 128-stt-metrics, 124-stt-scores, 126-stt-rescore, 127-stt-rescore-sh, 125-stt-projects)
+- 11.1 the idea (diagram): Wispr Flow's own history labels which prompts were spoken; a model guesses the rest
+- 11.2 the labels: Wispr's history, read-only, counts only
+- 11.3 a char n-gram model, 5-fold CV: AUC high, AP low (a 1:200 base rate)
+- 11.4 train on gb300: bge-m3 fine-tuned, 30 typed per spoken, the epoch with the best AP kept
+- 11.5 held out: fine-tuned vs n-gram on the same split
+- 11.6 the data doubled under the model: 41k prompts with no score; --score-only rescored them, no retraining
+- 11.7 the year scored: which months, which projects; June-July read as spoken before Wispr was installed on m5
+proof: D4, captures 120-127
+
+### บทที่ 12: งานยาวข้ามคืน — สิ่งที่พังในวันที่สอง  (images: D5-overnight, 130-refused, 131-tunnel-code, 132-gaps, 133-cycle, 134-kill-save, 135-kill-test, 136-scan-sessions, 139-scan-message, 140-merge-message, 141-scan-log, 142-scan-tiers, 143-rerun-slip, 137-tz, 138-git-log2)
+- each failure: what happened · how it was noticed · cause · fix · rule
+- 12.1 the ssh tunnel died after 825 windows: Connection refused → ServerAlive + reopen + autossh
+- 12.2 the reopen worked by itself at 13:18 (a 58 s pause in readings.jsonl)
+- 12.3 23:00-08:00 for three nights: the cycle script, and GMT+7
+- 12.4 a kill that did not save: the with-block waited for every queued window; SIGHUP from the pane; the fix and the test
+- 12.5 deep readings without friction: 8,400 windows saved without the two keys; read again
+- 12.6 the scan index shrank to 3,048 sessions (a setup script run in the wrong account); relic4-scan restored it; the kept copy is the bad file
+- 12.7 then it doubled: every .claude home merged (101,183 sessions) — every lane re-queued, unchanged windows kept by prompt hash
+- 12.8 my own slip: a generated capture script re-ran the whole book's captures and a publish
+- 12.9 the day's commits
+proof: D5, captures 130-143

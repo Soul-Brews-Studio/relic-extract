@@ -1,0 +1,49 @@
+$ git show 32368be -- report/readings.py | rg '^[-+] '
++    signal.signal(signal.SIGHUP, _stop)  # the pane closing (herdr pane close) sends SIGHUP
+-        if cache.get(label, {}).get("h") == h:
+-            return label, shape, cache[label], False
++        got = cache.get(label, {})
++        # a deep reading cached without friction/lesson (days.ask dropped them before 2026-10-24 14:40) is read again
++        if got.get("h") == h and (not a.deep or "friction" in got):
++            return label, shape, got, False
+-        ans = ask_zai(model, prompt, keys) if lane == "zai" else dy.ask(model, prompt)
++        ans = ask_zai(model, prompt, keys) if lane == "zai" else dy.ask(model, prompt, keys=keys)
++    # no `with`: leaving a with-block waits for every queued window (hours), so a kill never reached the save
++    ex = ThreadPoolExecutor(max_workers=a.workers if lane == "zai" else 1)
+-        with ThreadPoolExecutor(max_workers=a.workers if lane == "zai" else 1) as ex:
+-            futs = [ex.submit(one, j) for j in jobs]
+-            for f in as_completed(futs):
+-                try:
+-                    label, shape, ans, new = f.result()
+-                except Exception as e:
+-                    print(f"  failed: {e.__class__.__name__}: {str(e)[:120]}", flush=True)
+-                    continue
+-                with lock:
+-                    cache[label] = ans
+-                    out.append(dict(window=label, shape=shape, reading={k: ans.get(k) for k in keys}))
+-                    done += 1
+-                    if new:
+-                        print(f"  {label} · {shape['prompts']} prompts · {shape['projects']} projects · {ans.get('secs'
+-                              f"{ans.get('type')} · {str(ans.get('focus'))[:70]}", flush=True)
+-                    if done % 25 == 0:
+-                        cache_f.write_text(json.dumps(cache, ensure_ascii=False))
++        futs = [ex.submit(one, j) for j in jobs]
++        for f in as_completed(futs):
++            try:
++                label, shape, ans, new = f.result()
++            except Exception as e:
++                print(f"  failed: {e.__class__.__name__}: {str(e)[:120]}", flush=True)
++                continue
++            with lock:
++                cache[label] = ans
++                out.append(dict(window=label, shape=shape, reading={k: ans.get(k) for k in keys}))
++                done += 1
++                if new:
++                    print(f"  {label} · {shape['prompts']} prompts · {shape['projects']} projects · {ans.get('secs')}s 
++                          f"{ans.get('type')} · {str(ans.get('focus'))[:70]}"
++                          + (f" · friction: {str(ans.get('friction'))[:50]}" if a.deep else ""), flush=True)
++                if done % 25 == 0:
++                    cache_f.write_text(json.dumps(cache, ensure_ascii=False))
++        ex.shutdown(wait=False, cancel_futures=True)
++        dy._TUN.clear()  # a request still in flight must not reopen the tunnel after we stop
+(exit 0 · 0.0 s)

@@ -1,0 +1,14 @@
+$ python3 lanes.py agree
+day: day gb300 vs day zai  316 windows both read  same type 50%
+    gb300 build     / zai mixed        84
+    gb300 build     / zai ops          22
+    gb300 build     / zai fix          15
+    gb300 ops       / zai build         5
+    gb300 mixed     / zai build         5
+3h: 3h gb300 vs 3h zai  1,909 windows both read  same type 55%
+    gb300 build     / zai mixed       240
+    gb300 build     / zai ops         150
+    gb300 build     / zai fix          98
+    gb300 ops       / zai build        32
+    gb300 mixed     / zai build        27
+(exit 0 · 0.1 s)

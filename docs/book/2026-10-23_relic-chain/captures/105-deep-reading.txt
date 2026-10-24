@@ -1,0 +1,11 @@
+$ python3 deep.py any 1   (one 15-minute window, deep)
+8,400 windows in the cache · 100 read with the deep keys · friction named in 12 · lesson named in 49
+{
+ "window": "2025-09-21 16:15-16:30",
+ "type": "research",
+ "focus": "Exploring graph node and subgraph concepts on a blockchain explorer and adjusting Docker port configurations for a local setup.",
+ "friction": "The Docker Compose command was not found, requiring installation or configuration.",
+ "lesson": "Ensure Docker Compose is properly installed and configured before running commands.",
+ "th": "ผู้ใช้ใช้เวลา 15 นาทีศึกษาเรื่อง graph node และ subgraph บน blockchain explorer และปรับแต่งการตั้งค่าพอร์ต Docker สำหรับการตั้งค่าท้องถิ่น พบปัญหาการใช้งานคำสั่ง Docker Compose ที่ไม่ถูกต้อง"
+}
+(exit 0 · 0.1 s)
