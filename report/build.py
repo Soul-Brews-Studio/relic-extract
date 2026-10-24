@@ -239,10 +239,66 @@ def tidy(data, out: Path):
 def page(data):
     html = (HERE / "index.html").read_text()
     css = (HERE / "report.css").read_text()
-    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "days.js", "work.js", "report.js", "pictures.js", "deep.js", "focus.js", "oracles.js", "memory.js", "months.js", "nav.js"))
+    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "days.js", "windows.js", "work.js", "switches.js", "report.js", "pictures.js", "deep.js", "focus.js", "oracles.js", "memory.js", "months.js", "nav.js"))
     html = html.replace("/*I18N*/", (HERE / "i18n.js").read_text())
     blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     return html.replace("/*CSS*/", css).replace("/*JS*/", js).replace("/*DATA*/null", blob)
+
+
+TYPES = ("build", "fix", "ops", "research", "writing", "planning", "mixed")
+
+
+def window_sessions(scan, extract):
+    """{unit: {(day, start minute): [session ids]}}: the main-session prompts each window was read from, the same
+    rows readings.py and blocks.py feed the model (user, chunk 0, main tier), so a reading leads back to its sessions."""
+    con = common.connect(scan, extract)
+    mins = "(cast(substr(ts_th, 12, 2) as int) * 60 + cast(substr(ts_th, 15, 2) as int))"
+    out = {}
+    for unit, span in (("day", 1440), ("3h", 180), ("1h", 60), ("15m", 15)):
+        out[unit] = {(d, int(m)): sids for d, m, sids in con.execute(f"""select substr(ts_th, 1, 10) d, ({mins} // {span}) * {span} AS m0,
+            list(distinct sid order by sid) from x where role = 'user' and chunk = 0 and tier = 'main' and ts_th <> '' group by 1, 2""").fetchall()}
+    return out
+
+
+def windows(rep, public, share, sess=None):
+    """Every window reading, one compact row each: [day, start minute, type, top project, prompts, focus, friction,
+    lesson, session ids]. Lanes: blocks.json (3h) and blocks-1h.json on gb300, readings-<unit>-<lane>-<model>[-deep].json.
+    The share view keeps type, project and count, not the model's sentences; the public view keeps type and count.
+    Session ids only in the private view (sess is None otherwise)."""
+    lanes = {}
+
+    def row(day, m0, rd, shape, unit):
+        ty = rd.get("type") if rd.get("type") in TYPES else "mixed"
+        txt = not (public or share)
+        return [day, m0, ty, None if public else shape.get("top_project"), shape.get("prompts", 0),
+                rd.get("focus") if txt else None, rd.get("friction") if txt else None, rd.get("lesson") if txt else None,
+                (sess or {}).get(unit, {}).get((day, m0)) if sess else None]
+
+    for f, unit in (("blocks.json", "3h"), ("blocks-1h.json", "1h")):
+        if (rep / f).exists():
+            b = json.loads((rep / f).read_text())
+            rows = [row(x["day"], x["h0"] * 60, x.get("reading") or {}, x.get("shape") or {}, unit) for x in b["blocks"]]
+            lanes[f"{unit} gb300"] = dict(unit=unit, host="gb300", model=b.get("model"), deep=False, built=b.get("built"),
+                                          rows=sorted(rows, key=lambda r: (r[0], r[1])),
+                                          summary=None if public else b.get("summary"))
+    for f in sorted(rep.glob("readings-*.json")):
+        if f.name.startswith("readings-cache"):
+            continue
+        r = json.loads(f.read_text())
+        lane = r["model"].split(":", 1)[0]
+        if r["unit"] in ("3h", "1h") and lane == "gb300":
+            continue  # the blocks files already carry these
+        rows = []
+        for w in r["windows"]:
+            lab = w["window"]
+            day, m0 = lab[:10], (int(lab[11:13]) * 60 + int(lab[14:16])) if len(lab) > 10 else 0
+            rows.append(row(day, m0, w.get("reading") or {}, w.get("shape") or {}, r["unit"]))
+        if len(rows) < 30:
+            continue  # a trial run (--limit), not a lane
+        lanes[f"{r['unit']} {lane}{' deep' if r.get('deep') else ''}"] = dict(
+            unit=r["unit"], host=lane, model=r["model"].split(":", 1)[1], deep=r.get("deep", False), built=r.get("built"),
+            rows=sorted(rows, key=lambda x: (x[0], x[1])), summary=None)
+    return lanes
 
 
 def share(data):
@@ -288,18 +344,26 @@ def main():
     ap_ = Path(a.extract).expanduser() / "report" / "asks.json"
     if ap_.exists() and not a.public:  # asks.py's output: quoted passages, so the private view only
         data["asks"] = json.loads(ap_.read_text())
+    sp = Path(a.extract).expanduser() / "report" / "switches.json"
+    if sp.exists() and not a.public:  # switches.py's output: project names and counts
+        data["switches"] = json.loads(sp.read_text())
     wp = Path(a.extract).expanduser() / "report" / "work.json"
     if wp.exists() and not a.public:  # work.py's output: repository names and counts
         data["work"] = json.loads(wp.read_text())
     dp = Path(a.extract).expanduser() / "report" / "days.json"
-    if dp.exists():  # days.py's output; the share and public views keep each day's numbers, not its summary
+    if dp.exists():  # days.py's output; the share and public views keep each day's numbers and type, not its sentences
         dd = json.loads(dp.read_text())
         if a.public or a.share:
             for d in dd["days"]:
-                d["summary"] = None
+                ty = (d.get("summary") or {}).get("type")
+                d["summary"] = {"type": ty} if ty in TYPES else None
                 if a.public:
                     d["repos"] = []
         data["days"] = dd
+    sess = None if (a.public or a.share) else window_sessions(Path(a.scan).expanduser(), Path(a.extract).expanduser())
+    lanes = windows(Path(a.extract).expanduser() / "report", a.public, a.share, sess)
+    if lanes:  # blocks.py and readings.py: what each 3h/1h/15m window was, on gb300 and z.ai
+        data["windows"] = lanes
     pp = Path(a.extract).expanduser() / "report" / "pictures.json"
     if pp.exists() and not a.public:  # pictures.py's output: topic names and typed words, no passages
         data["pictures"] = json.loads(pp.read_text())

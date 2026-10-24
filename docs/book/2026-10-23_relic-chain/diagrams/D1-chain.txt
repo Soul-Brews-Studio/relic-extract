@@ -1,0 +1,20 @@
+ relic · one chain on one Mac, measured 2026-10-23 (captures 05 11 21 91)
+
+ ┌──────────────────────────┐      ┌──────────────────────────────────┐
+ │ relic-scan               │      │ relic-extract                    │
+ │ every agent transcript   │ ───► │ pick · clean · cut 6000/400      │
+ │ ~/.relic-scan   2.4G     │      │ key = blake2b-128 of the chunk   │
+ │ call      1,837,217 rows │      │ text      810,642 chunks         │
+ │ result    1,735,332      │      │ thinking  101,995                │
+ │ thinking    860,440      │      │ tools   1,811,424                │
+ │ assistant   661,203      │      │ ~/.relic-extract  text 178M      │
+ │ user        356,406      │      │                   tools 291M     │
+ └──────────────────────────┘      └────────────────┬─────────────────┘
+                                                    │ ssh gb300
+                                                    ▼
+ ┌──────────────────────────┐      ┌──────────────────────────────────┐
+ │ report/                  │      │ embed on gb300 (GB300 GPU)       │
+ │ topics · vector space    │ ◄─── │ embeddinggemma-300m, 768 dims    │
+ │ days by qwen3:14b        │      │ cache  3.0G · text.lance  8.9G   │
+ │ one page, three views    │      │ tools.lance 6.2G · vault 1.5G    │
+ └──────────────────────────┘      └──────────────────────────────────┘

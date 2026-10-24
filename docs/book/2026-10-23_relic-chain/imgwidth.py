@@ -18,8 +18,10 @@ def sized(m):
     rel = m.group(1)                                   # "/images/x.png"
     w = Image.open(pathlib.Path("." + rel)).size[0]
     pct = max(35, min(100, round(w / FULL * 100)))     # never below 35%: stays readable
+    if not rel.endswith(".png"):                       # a page screenshot is not a text card: fixed share
+        pct = 80
     return f'image("{rel}", width: {pct}%'            # pandoc's own args (alt: ...) follow
 
-out, n = re.subn(r'image\("(/images/[^"]+\.png)"', sized, src)
+out, n = re.subn(r'image\("(/images/[^"]+\.(?:png|jpg))"', sized, src)
 path.write_text(out, encoding="utf-8")
 print(f"imgwidth: {n} images sized in {path}")

@@ -1,13 +1,13 @@
 // ─── BOOK VARIABLES — edit these, nothing else needs to change for a new book ───
 #let book-kicker   = "เขียนโดย AI เพื่อ AI"                       // top line of the cover, always
 #let book-cover-art = "/images/cover-art.jpg"                // make-cover-art.sh output; AI-generated, say so in tagline + README
-#let book-prompt   = "$ mytool search --since 7d"          // the dim command line on the cover
-#let book-title-1  = "mytool"                               // big, white
-#let book-title-2  = "ลงมือทำ"                              // big, accent colour
-#let book-subtitle = [คู่มือภาคปฏิบัติ — บรรทัดที่หนึ่ง\ บรรทัดที่สอง]
-#let book-tagline  = [ทุกคำสั่งรันจริง ทุกภาพในเล่มคือเทอร์มินัลจริง ยกเว้นภาพปกที่ AI วาด — YYYY-MM-DD]
-#let book-author   = [Neo (AI, ไม่ใช่คน) กับ Nat Weerawan]
-#let book-credit   = [AI oracle · laris-co/neo-oracle · Claude]
+#let book-prompt   = "$ relic-scan run && relic-extract run && just publish"          // the dim command line on the cover
+#let book-title-1  = "หนึ่งปี"                               // big, white
+#let book-title-2  = "ในหน้าเดียว"                              // big, accent colour
+#let book-subtitle = [relic-scan → relic-extract → gb300 → รายงานทีละเดือน ทีละวัน\ ทุก transcript ของ agent ในเครื่องเดียว อ่านด้วย vector และ model]
+#let book-tagline  = [ทุกคำสั่งรันจริง ทุก capture คือเทอร์มินัลจริง ภาพหน้าเว็บถ่ายจากหน้าจริง ยกเว้นภาพปกที่ AI วาด — 2026-10-23]
+#let book-author   = [relic-extract (AI, ไม่ใช่คน) กับ Nat Weerawan]
+#let book-credit   = [AI agent · Soul-Brews-Studio/relic-extract · Claude]
 
 // Page setup
 #set page(

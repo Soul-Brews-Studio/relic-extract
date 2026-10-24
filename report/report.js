@@ -131,6 +131,7 @@ part("part.year");
 
 // day by day: the calendar (days.js)
 if (typeof daySection === "function") daySection();
+if (typeof winSection === "function") winSection();
 
 // 8. language
 {

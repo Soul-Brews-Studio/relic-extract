@@ -10,9 +10,9 @@ REVIEW-facts.md, REVIEW-codeblocks.md, REVIEW-formatting.md. Plus these book-wid
 4. Code widths: bash ≤ 76 chars (wrap ` \` + 2-space continuation); output ≤ 76 (cut with `…`).
    Verbatim source excerpts stay verbatim — typst wraps them.
 5. Provenance: a "not in any capture" finding is resolved by CITING the capture that the lead
-   added for it ({{list new captures here}}), never by inventing a source. If no capture exists,
+   added for it (93-errors, 94-zai-keys; plus BRIEF.md FACTS), never by inventing a source. If no capture exists,
    remove or soften the claim.
-6. Cross-chapter duplication: {{which chapter keeps the full explanation, which points back}}.
+6. Cross-chapter duplication: ch5 keeps how the page is built, ch6 the model readings, ch8 every failure; others point back in one clause.
 7. Never add a number, flag or output line that is not in captures/*.txt or BRIEF.md FACTS.
 8. Keep every image and path unless a finding says it is wrong; each sits directly under the
    command that produced it.
