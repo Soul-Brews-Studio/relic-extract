@@ -144,6 +144,10 @@ def ask_zai(model, prompt, keys):
 
 
 def _stop(*_):
+    # the first signal stops the run; ignore the rest (the pane closing sends SIGHUP right after a TERM), or a second
+    # one lands inside the cache save in `finally` and the save is lost
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
     raise KeyboardInterrupt
 
 

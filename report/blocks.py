@@ -23,6 +23,7 @@ OUT = HOME / ".relic-extract" / "report"
 
 
 def main():
+    dy.on_stop()
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3:14b")
     ap.add_argument("--host", default="gb300")

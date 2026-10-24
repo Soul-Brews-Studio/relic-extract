@@ -16,8 +16,9 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
 import re
+import shutil
+import signal
 import socket
 import subprocess
 import time
@@ -176,7 +177,19 @@ def day_input(con, d, h0=0, h1=24):
     return shape, lines, alines
 
 
+def on_stop():
+    """A kill (SIGTERM, or SIGHUP when the pane closes) runs the finally blocks like Ctrl-C, so the cache is saved and
+    the next run resumes (the gb300 queue stops each lane at 08:00)."""
+    def _stop(*_):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second signal would land inside the save
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGHUP, _stop)
+
+
 def main():
+    on_stop()
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--model", default="qwen3:14b")
