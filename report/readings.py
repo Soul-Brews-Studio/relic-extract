@@ -160,6 +160,7 @@ def main():
     ap.add_argument("--model", default="zai:glm-5.3")
     ap.add_argument("--deep", action="store_true")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--gb-workers", type=int, default=1, help="requests at a time on gb300 (default 1)")
     ap.add_argument("--min", type=int, default=3)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--sample", type=int, default=0, help="read N windows spread evenly over the year (a model trial)")
@@ -244,7 +245,8 @@ def main():
     tun = dy.tunnel("gb300", model) if lane == "gb300" else None
     out = []
     # no `with`: leaving a with-block waits for every queued window (hours), so a kill never reached the save
-    ex = ThreadPoolExecutor(max_workers=a.workers if lane == "zai" else 1)
+    # gb300: one request at a time unless --gb-workers asks for more (ollama runs them side by side on the shared GPU)
+    ex = ThreadPoolExecutor(max_workers=a.workers if lane == "zai" else a.gb_workers)
     try:
         futs = [ex.submit(one, j) for j in jobs]
         for f in as_completed(futs):
@@ -279,4 +281,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:  # a stop (TERM, HUP, Ctrl-C): the cache was saved in main's finally; no traceback
+        print("readings: stopped, cache saved; the next run resumes from it", flush=True)
+        raise SystemExit(130)

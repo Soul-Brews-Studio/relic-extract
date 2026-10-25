@@ -6,6 +6,7 @@ const I18N = {
   en: {
     "lang.button": "ไทย",
     "st.h": "What we are working on now", "st.lead": "As of {at} (Bangkok): {n} reading lanes are moving. Each lane reads every window of time with a model and saves one reading per window; gb300 lanes run one at a time between {a}:00 and 0{b}:00, the z.ai lanes day and night.",
+    "st.lead2": "As of {at} (Bangkok): {n} reading lanes are moving. Each lane reads every window of time with a model and saves one reading per window; on each machine the lanes run one after another, day and night.",
     "st.lane": "Lane", "st.window": "Window", "st.read": "Windows read", "st.pace": "Pace", "st.state": "State", "st.finish": "Finish (Bangkok)",
     "st.unit.day": "day", "st.unit.3h": "3 hours", "st.unit.1h": "1 hour", "st.unit.15m": "15 minutes", "st.deep": "friction, lesson",
     "st.perh": "{n} / hour", "st.s.running": "reading", "st.s.paused": "paused (day hours)", "st.s.queued": "queued", "st.s.done": "pass done",
@@ -180,6 +181,7 @@ const I18N = {
   th: {
     "lang.button": "English",
     "st.h": "ตอนนี้กำลังทำอะไรอยู่", "st.lead": "ณ {at} (เวลาไทย) มี {n} lane กำลังอ่านอยู่ครับ แต่ละ lane ให้ model อ่านทุกช่วงเวลาแล้วเก็บผลไว้ช่วงละหนึ่งชิ้น lane บน gb300 รันทีละตัวเฉพาะ {a}:00 ถึง 0{b}:00 ส่วน z.ai รันทั้งวันทั้งคืน",
+    "st.lead2": "ณ {at} (เวลาไทย) มี {n} lane กำลังอ่านอยู่ครับ แต่ละ lane ให้ model อ่านทุกช่วงเวลาแล้วเก็บผลไว้ช่วงละหนึ่งชิ้น บนแต่ละเครื่อง lane รันต่อกันทีละตัว ทั้งวันทั้งคืน",
     "st.lane": "lane", "st.window": "ช่วงเวลา", "st.read": "อ่านแล้ว", "st.pace": "ความเร็ว", "st.state": "สถานะ", "st.finish": "เสร็จ (เวลาไทย)",
     "st.unit.day": "วัน", "st.unit.3h": "3 ชั่วโมง", "st.unit.1h": "1 ชั่วโมง", "st.unit.15m": "15 นาที", "st.deep": "สิ่งที่ติด, บทเรียน",
     "st.perh": "{n} / ชั่วโมง", "st.s.running": "กำลังอ่าน", "st.s.paused": "พัก (ช่วงกลางวัน)", "st.s.queued": "รอคิว", "st.s.done": "อ่านครบรอบแล้ว",
