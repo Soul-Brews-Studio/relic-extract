@@ -240,7 +240,7 @@ def tidy(data, out: Path):
 def page(data):
     html = (HERE / "index.html").read_text()
     css = (HERE / "report.css").read_text()
-    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "days.js", "windows.js", "work.js", "switches.js", "report.js", "pictures.js", "deep.js", "focus.js", "oracles.js", "memory.js", "months.js", "nav.js"))
+    js = "\n".join((HERE / f).read_text() for f in ("charts.js", "days.js", "windows.js", "work.js", "switches.js", "report.js", "status.js", "pictures.js", "deep.js", "focus.js", "oracles.js", "memory.js", "months.js", "nav.js"))
     html = html.replace("/*I18N*/", (HERE / "i18n.js").read_text())
     blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     return html.replace("/*CSS*/", css).replace("/*JS*/", js).replace("/*DATA*/null", blob)
@@ -380,6 +380,9 @@ def main():
     lanes = windows(Path(a.extract).expanduser() / "report", a.public, a.share, sess)
     if lanes:  # blocks.py and readings.py: what each 3h/1h/15m window was, on gb300 and z.ai
         data["windows"] = lanes
+    stp = Path(a.extract).expanduser() / "report" / "status.json"
+    if stp.exists():  # status.py's output: each reading lane's counts, pace and finish, and the model trial (counts and model names)
+        data["status"] = json.loads(stp.read_text())
     pp = Path(a.extract).expanduser() / "report" / "pictures.json"
     if pp.exists() and not a.public:  # pictures.py's output: topic names and typed words, no passages
         data["pictures"] = json.loads(pp.read_text())
