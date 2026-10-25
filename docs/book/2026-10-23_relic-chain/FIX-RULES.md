@@ -29,3 +29,12 @@ REVIEW-facts.md, REVIEW-codeblocks.md, REVIEW-formatting.md. Plus these book-wid
 14. A finding whose quoted text is not in the current file is stale: skip it and say "text changed".
 Your findings: `python3 verify.py --for <your-file>.md` (script) and REVIEW-claims-*.md lines naming your file.
 Edit the file IN PLACE. Return ONLY: `fixed NN-slug.md — <n> findings applied, <m> skipped (why)`.
+
+## Part 5 (chapters 13-16)
+- Findings are in REVIEW-claims-13-14.md and REVIEW-claims-15-16.md.
+- The trial build (101 pages) found three text-only pages: the end of 13-vs.md (its last paragraph spilled onto a
+  page alone: trim 13.3-13.5 repetition the review lists so it ends on the 153 image's page), 14.2 in 14-friction.md
+  (use the new capture `images/170-vs-lesson.png` = `rg -A2 'lesson:' captures/154-vs-friction.txt`, under that
+  command in a ```bash block, in place of the plain lesson block), and the end of 16-status.md (its closing
+  paragraphs sit alone: shorten them so they fit under the last image, or move 169-git-log3 below them).
+- The z.ai 15m lane was still running at capture time: never write that the whole year was compared at 15m.

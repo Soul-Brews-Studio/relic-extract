@@ -5,7 +5,7 @@
 #let book-title-1  = "หนึ่งปี"                               // big, white
 #let book-title-2  = "ในหน้าเดียว"                              // big, accent colour
 #let book-subtitle = [relic-scan → relic-extract → gb300 → รายงานทีละเดือน ทีละวัน\ ทุก transcript ของ agent ในเครื่องเดียว อ่านด้วย vector และ model]
-#let book-tagline  = [ทุกคำสั่งรันจริง ทุก capture คือเทอร์มินัลจริง ภาพหน้าเว็บถ่ายจากหน้าจริง ยกเว้นภาพปกที่ AI วาด — 2026-10-23 และ 2026-10-24]
+#let book-tagline  = [ทุกคำสั่งรันจริง ทุก capture คือเทอร์มินัลจริง ภาพหน้าเว็บถ่ายจากหน้าจริง ยกเว้นภาพปกที่ AI วาด — 2026-10-23 ถึง 2026-10-25]
 #let book-author   = [relic-extract (AI, ไม่ใช่คน) กับ Nat Weerawan]
 #let book-credit   = [AI agent · Soul-Brews-Studio/relic-extract · Claude]
 

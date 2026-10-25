@@ -128,3 +128,39 @@ proof: D4, captures 120-127
 - 12.8 my own slip: a generated capture script re-ran the whole book's captures and a publish
 - 12.9 the day's commits
 proof: D5, captures 130-143
+
+## ภาค 5 — วันที่สาม (2026-10-25): gb300 กับ z.ai ทั้งปี ช่วงต่อช่วง
+
+### บทที่ 13: สองโมเดล ช่วงเดียวกัน ทั้งปี  (images: D6-vs, 151-vs-trial, 150-vs-agree, 152-vs-opening, 153-vs-example)
+- 13.1 the picture (D6): both caches, four grains, how often the type is the same, how fast
+- 13.2 why qwen3:14b on gb300 at all: the five-model trial on 198 shared 3h windows (qwen3:14b 52% same as z.ai, 6.8 s)
+- 13.3 python3 vs.py agree: per grain both read, same type 45-54%, the splits (gb300 build / z.ai mixed, ops, fix), type mix each
+- 13.4 how each model starts its reading: gb300 "The day was spent" even for a 3h or 1h block, "The person spent 15" at 15m; z.ai names the grain ("These 15 minutes were") and Nat
+- 13.5 one window side by side (2026-06-10 00:15): gb300 mixed, no friction; z.ai fix, names the disproven hypothesis
+proof: D6, captures 150-153
+
+### บทที่ 14: friction กับ lesson ทุก 15 นาที  (images: 154-vs-friction, 170-vs-lesson, 155-vs-months)
+- 14.1 vs.py friction: on 8,925 windows both read deep, gb300 says "none" 96%, z.ai 14%; only z.ai 7,366, both 350, only gb300 4
+- 14.2 lesson: gb300 none 54%, z.ai 0%; median length 122 vs 173 chars
+- 14.3 where z.ai finds friction, by gb300's type: build 3,219 first
+- 14.4 month by month: same-type 46-73%; z.ai friction 46-95% of windows; gb300 0-13%
+- 14.5 what this means for the page: the friction column comes from z.ai; gb300's type and focus still carry the windows z.ai has not read
+proof: captures 154, 155
+
+### บทที่ 15: เร็วแค่ไหน และ GPU เป็นของใคร  (images: 156-vs-speed, D7-day25, 157-pace-1025, 158-gpu-100, 159-three-workers, 160-gpu-who, 161-gpu-vllm, 162-queue-done, 163-zai-slow)
+- 15.1 vs.py speed: gb300 2.7-3.4 s median per answer, z.ai 49.2-74.6 s; p90 gb300 15m 10.1 s
+- 15.2 the day of the gb300 lane (D7) and its pace by hour (157): ~10 s at night, 27.8 s in the 08:00 hour, ~2.5 s after 10:00
+- 15.3 "make it work asap": three requests at a time made each one slower (159: 28 answers, median 28.0 s)
+- 15.4 "who eat 100%?": the GPU at 100% on the night before (158); at 09:50 0%, seven processes of other users (160), their vLLM counters (161) — counters are lifetime totals, not a reading of 08:48
+- 15.5 resumed at 09:51, one at a time: ~1,400 answers/h; the queue ended 19:26 after 34,492 s (162)
+- 15.6 z.ai is slow, not failing: 103 answers, median 67.3 s; 8 workers kept (163)
+proof: D7, captures 156-163
+
+### บทที่ 16: ตัวเลขบนหน้าที่ผิด — status.py  (images: 164-st-paused, 165-st-keys, 166-st-empty, 167-watch-fix, 168-st-now, 169-git-log3)
+- each failure: what the page said · what was true · cause · fix · rule
+- 16.1 "paused" when gb300 was reading the 3h lane: days.py/blocks.py write nothing to readings.jsonl; now a lane is live while its cache file changes, and one lane per machine runs (PR #30)
+- 16.2 3h "1,089 of 2,089" (164) when far more were read: keys `|{h}` vs `|{h:02d}`, bare day vs `qwen3:14b|day` (PR #31)
+- 16.3 355 windows "left" that no lane can read: every prompt under 8 characters (166); status drops them; a machine with no lane running is done (PR #32)
+- 16.4 the watcher exited on a half-written parquet (TProtocolException) and called it "all done"; now it retries in 120 s (167)
+- 16.5 the board now (168) and part 5's commits (169)
+proof: captures 164-169

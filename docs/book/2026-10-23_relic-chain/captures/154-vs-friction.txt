@@ -1,0 +1,10 @@
+$ python3 vs.py friction
+15m windows read deep by both: 8,925
+  friction: 'none' from gb300 96% · from z.ai 14%
+     both found one 350 · only z.ai 7,366 · only gb300 4 · neither 1,205
+     median length when found: gb300 106 chars · z.ai 200 chars
+  lesson: 'none' from gb300 54% · from z.ai 0%
+     both found one 4,087 · only z.ai 4,817 · only gb300 11 · neither 10
+     median length when found: gb300 122 chars · z.ai 173 chars
+  windows where z.ai found friction, by gb300's type: build 3,219, ops 1,235, research 1,100, fix 991, mixed 665
+(exit 0 · 0.3 s)

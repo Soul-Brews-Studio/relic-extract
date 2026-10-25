@@ -132,3 +132,48 @@ Images for part 4 (exact names): 140-merge-message.png 141-scan-log.png 142-scan
 - Session 008db2b3 (in capture 106 and the page's rows) is this session: relic-extract, the agent writing this book.
   Session ids are on window rows in the private view only; build.py leaves them out of the share and public views.
 - z.ai lanes ran with 4 workers (the 1-hour pass while this was written); gb300 reads one window at a time.
+
+## Part 5 (chapters 13-16): the third day, 2026-10-25 — gb300 against z.ai
+Same rules. Captures 150-169 were run on 2026-10-26 02:57 (+07) by `capture3.sh` (part 5 only; it re-runs nothing
+of parts 1-4). `vs.py` reads the two lanes' caches in ~/.relic-extract/report and prints counts (and, in `example`,
+one window's readings). Captures 158-163 and 166 print what one of this session's own commands printed when it ran
+(`toolout.py <session> <text>`), 162 and 164 what a pane / the watcher sent (`paneout.py`): say "as it came back" /
+"as the pane reported" — never present them as run again. The z.ai 15m lane was STILL RUNNING when the captures ran
+(8,925 of 15,440 windows, capture 168): every 15m comparison is over the windows both had read by then.
+
+Images for part 5 (exact names): D6-vs.png D7-day25.png 150-vs-agree.png 151-vs-trial.png 152-vs-opening.png
+153-vs-example.png 154-vs-friction.png 155-vs-months.png 156-vs-speed.png 157-pace-1025.png 158-gpu-100.png
+159-three-workers.png 160-gpu-who.png 161-gpu-vllm.png 162-queue-done.png 163-zai-slow.png 164-st-paused.png
+165-st-keys.png 166-st-empty.png 167-watch-fix.png 168-st-now.png 169-git-log3.png 170-vs-lesson.png
+
+### FACTS for part 5 (2026-10-25, times +07)
+- Nat's asks, in his words: "make it work asap" · "pause gb300 first?" · "who eat 100%?" · "resume gb300" ·
+  "write the gb300 vs z.ai book now".
+- Until 08:00 the gb300 queue ran nights only (23:00-08:00). At 08:38 it was switched to day and night (commit be9089c,
+  capture 169; `status.py` NIGHT = None). be9089c also added `readings.py --gb-workers N` (default 1) and a clean
+  stop: one line and exit 130 instead of a KeyboardInterrupt traceback; the cache is saved either way.
+- With 1 worker, before the change, the 15m lane ran at 449 answers/h (status.py's pace at 08:38). With 3 workers:
+  28 answers 08:48:26-08:52:44, median 28.0 s (capture 159), about 390 answers/h. The queue went back to 1 worker.
+- Nat asked "pause gb300 first?": the queue and readings.py got SIGTERM; the cache held 11,194 15m windows.
+- 09:50: GPU 0 % in 5 samples (nvidia-smi dmon), no vLLM server had a request running, ollama had no model loaded.
+  ollama on gb300 is another user's (korn), reached through an ssh tunnel. Other users' servers (capture 160/161):
+  nazt's qwen3.8-27b vLLM (port 11510, started ~07:20, 4.24 M tokens in its 2.5 h), nazt's typhoon-ocr (11500),
+  nazt's qwen3-asr (4681), spartan's qwen3.8-27b-fp8 (8121), llama-server and comfyui, peboom's glm-5.3-flash (8001).
+  The counters are lifetime totals per server: they show who worked hardest, not who held the GPU at 08:48 —
+  nothing on gb300 logs GPU load over time. Say exactly this; do not name a culprit as proven.
+- Resumed 09:51 with 1 worker: from 10:01 about 22 answers a minute, median 2.4 s (the GPU to itself).
+  The queue ran 15m → day → 3h → 1h and ended 19:26 after 34,492 s (capture 162), then a catch-up run read the
+  windows that arrived meanwhile (~15 min).
+- The board was wrong three times (status.py), each found from a watcher message, each fixed and merged the same day:
+  PR #30 (ae3ceaf): days.py / blocks.py log nothing to readings.jsonl, so a running 3h lane showed "queued" and the
+  finished 15m lane "paused"; now a lane is live while its cache file changes, one lane per machine runs (the one
+  that wrote last). PR #31 (f18aaab): status looked up `qwen3:14b|DAY|H` (unpadded) and bare `DAY`; blocks.py writes
+  `qwen3:14b|DAY|HH` and days.py `qwen3:14b|DAY`: day 170 → 345 of 345, 3h → 2,082 of 2,090, 1h → 4,602 of 5,000
+  at the moment of the fix. PR #32 (b60da3a): 355 windows had only prompts under 8 characters, which readings.py
+  skips (`len(text.strip()) >= 8`), so they could never be read (243 of them in 2026-07); and a machine with no lane
+  running shows its lanes done.
+- 13:12: the watcher's status.py failed with `_duckdb.Error: TProtocolException: Invalid data` while relic-scan and
+  relic-extract rewrote parquet files; the watcher read the empty output as "every lane done" and exited rc=0.
+  Fix (capture 167): on a status.py failure it waits 120 s and tries again.
+- z.ai keeps 8 workers: only two keys answer; on 2026-10-24 one was rate-limited at 4 per key (part 4 FACTS).
+- The five-model trial (capture 151) is on 198 3h windows frozen for every model (trial.py --windows).
