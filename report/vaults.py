@@ -1,6 +1,7 @@
 """ψ vault notes as one more stream: ~/.relic-extract/vault/notes.parquet, one row per chunk, the same shape as the others.
 
     uv run python report/vaults.py
+    uv run python report/vaults.py --min-notes 126000   # keep the old file unless at least this many notes were read
 
 relic-scan lists every vault and note (meta/vaults.json, meta/vaults/<id>.json). This reads each markdown note of the
 own and plain vaults (git worktree copies are skipped: they duplicate their vault), 300 B to 2 MB, cuts it like the
@@ -10,8 +11,10 @@ the transcript streams where they can: msgkey = md5(vault path + note path), ts 
 role = "note", cat = the vault's oracle, so embed_streams.py and search.py treat it like any stream.
 """
 
+import argparse
 import hashlib
 import json
+import sys
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -53,8 +56,19 @@ def chunks(text):
     return out
 
 
+def meta_mtime():
+    """The newest mtime among the vault lists relic-scan writes (meta/vaults.json and meta/vaults/*.json)."""
+    fs = [META / "vaults.json", *(META / "vaults").glob("*.json")]
+    return max(f.stat().st_mtime for f in fs if f.exists())
+
+
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--min-notes", type=int, default=0,
+                    help="leave notes.parquet as it is (exit 3) when fewer notes than this were read")
+    a = ap.parse_args()
     t0 = time.time()
+    m0 = meta_mtime()
     vaults = json.loads((META / "vaults.json").read_text())["vaults"]
     cols = {k: [] for k in ("key", "msgkey", "chunk", "month", "sid", "ts", "ts_th", "engine", "role", "type", "kind", "name",
                             "cat", "probe", "text", "vault", "path", "section", "title")}
@@ -88,6 +102,14 @@ def main():
                                ("probe", False), ("text", c), ("vault", v["kind"]), ("path", rel), ("section", sec), ("title", title)):
                     cols[k].append(val)
             n_notes += 1
+    # relic-scan rewrites meta/vaults/*.json in place: read while it writes and a third of the notes go missing
+    # (2026-10-26 03:42: 93,322 notes instead of 140,839). Such a read never replaces the file.
+    if meta_mtime() != m0:
+        print(f"vaults: relic-scan rewrote meta/vaults while it was read ({n_notes:,} notes); notes.parquet left as it was")
+        sys.exit(4)
+    if n_notes < a.min_notes:
+        print(f"vaults: {n_notes:,} notes, fewer than --min-notes {a.min_notes:,}; notes.parquet left as it was")
+        sys.exit(3)
     OUT.mkdir(parents=True, exist_ok=True)
     tab = pa.table(cols)
     pq.write_table(tab, OUT / "notes.parquet.part", compression="zstd")
