@@ -172,6 +172,7 @@ def main():
     ap.add_argument("--gb-workers", type=int, default=1, help="requests at a time on gb300 (default 1)")
     ap.add_argument("--min", type=int, default=3)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--plan", action="store_true", help="count the windows already read, to read again (prompt changed) and new; read none")
     ap.add_argument("--sample", type=int, default=0, help="read N windows spread evenly over the year (a model trial)")
     ap.add_argument("--windows", metavar="CACHE", help="read only the windows in this readings-cache file (the same trial set for every model)")
     ap.add_argument("--restamp", metavar="SINCE", help="give cached readings logged since SINCE (2026-10-24T14:40) the current prompt hash, then stop")
@@ -235,6 +236,19 @@ def main():
         want = set(json.loads(Path(a.windows).expanduser().read_text()))
         jobs = [j for j in jobs if j[0] in want]
         print(f"readings: {len(jobs):,} windows from {Path(a.windows).name}", flush=True)
+    if a.plan:  # what a run would do: the same test as one() below, without asking any model
+        cur = stale = new = 0
+        for label, _, prompt in jobs:
+            got = cache.get(label)
+            if not got:
+                new += 1
+            elif got.get("h") == hashlib.md5((a.model + prompt).encode()).hexdigest() and (not a.deep or "friction" in got):
+                cur += 1
+            else:
+                stale += 1
+        print(f"readings: plan {tag}: {cur:,} current · {stale:,} to read again (prompt changed) · {new:,} new · "
+              f"{stale + new:,} to read · {time.time() - t0:.0f}s")
+        return
     lock = threading.Lock()
     done = 0
 
