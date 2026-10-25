@@ -38,12 +38,20 @@ Also answer two more keys:
 KEYS_DEEP = dy.KEYS + ("friction", "lesson")
 
 
+def snapshot(con):
+    """Every user prompt (chunk 0, all tiers) with its project, copied into memory once. window_input reads only this:
+    15,000 queries over the parquet parts took 10-15 minutes, and relic-chain rewrites those parts every few minutes,
+    which left DuckDB waiting forever (2026-10-26 04:05-04:28, issue #38). Same rows, same order, so the same prompts."""
+    con.execute("""create or replace temp table xw as select x.ts_th, x.tier, x.text, x.key, coalesce(ses.cat, x.cat) AS pcat
+                   from x left join ses using (sid) where x.role = 'user' and x.chunk = 0""")
+
+
 def window_input(con, d, m0, m1):
-    """day_input for minutes m0..m1 of day d (Bangkok)."""
+    """day_input for minutes m0..m1 of day d (Bangkok); needs snapshot(con) first."""
     mins = "(cast(substr(x.ts_th, 12, 2) as int) * 60 + cast(substr(x.ts_th, 15, 2) as int))"
     cond = f"substr(x.ts_th, 1, 10) = ? and {mins} >= {m0} and {mins} < {m1}"
-    rows = con.execute(f"""select substr(x.ts_th, 12, 5) AS hm, coalesce(ses.cat, x.cat) AS cat, x.text, x.key
-                           from x left join ses using (sid) where x.role = 'user' and x.chunk = 0 and x.tier = 'main'
+    rows = con.execute(f"""select substr(x.ts_th, 12, 5) AS hm, x.pcat AS cat, x.text, x.key
+                           from xw x where x.tier = 'main'
                            and {cond} order by x.ts_th, x.key, cat, x.text""", [d]).fetchall()   # a full order: ties (same second, the merged homes) came back in any order, so the prompt and its cache hash changed run to run
     rows = [r for r in rows if len(r[2].strip()) >= 8]
     reps = Counter(r[3] for r in rows)
@@ -53,8 +61,8 @@ def window_input(con, d, m0, m1):
             seen.add(r[3])
             uniq.append(r)
     cats = Counter(r[1] for r in rows)
-    agents = con.execute(f"""select coalesce(ses.cat, x.cat), min(x.text) from x left join ses using (sid)
-                             where x.role = 'user' and x.chunk = 0 and x.tier <> 'main' and {cond} group by 1, x.key
+    agents = con.execute(f"""select x.pcat, min(x.text) from xw x
+                             where x.tier <> 'main' and {cond} group by 1, x.key
                              order by 1, x.key limit 12""", [d]).fetchall()
     shape = dict(prompts=len(rows), distinct=len(uniq), loop_prompts=sum(n for n in reps.values() if n >= 3),
                  projects=len(cats), top_project=cats.most_common(1)[0][0] if cats else None,
@@ -183,6 +191,7 @@ def main():
     keys = KEYS_DEEP if a.deep else dy.KEYS
     tag = f"{a.unit}-{lane}-{model.replace(':', '_')}{'-deep' if a.deep else ''}"
     con = common.connect(HOME / ".relic-scan", HOME / ".relic-extract")
+    snapshot(con)
     units = con.execute(f"""select substr(ts_th, 1, 10) d, ((cast(substr(ts_th, 12, 2) as int) * 60 + cast(substr(ts_th, 15, 2) as int)) // {span}) * {span} AS m0,
                             count(distinct msgkey) n from x where role = 'user' and chunk = 0 and tier = 'main' and ts_th <> ''
                             group by 1, 2 having count(distinct msgkey) >= ? order by 1, 2""", [a.min]).fetchall()
