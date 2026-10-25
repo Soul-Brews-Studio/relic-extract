@@ -103,8 +103,11 @@ def main():
         rate = n_hr.get(k, 0)
         seen = last.get(k)
         live = seen is not None and (now - seen).total_seconds() < 900
+        if not live and lmodel is None and p.exists():  # days.py / blocks.py log nothing to readings.jsonl: their cache moving is the sign
+            seen = dt.datetime.fromtimestamp(p.stat().st_mtime, BKK)
+            live = (now - seen).total_seconds() < 900
         state = "done" if done >= total else "running" if live else "queued"
-        if mach == "gb300" and state == "queued" and lid == "gb300-15m":
+        if NIGHT and mach == "gb300" and state == "queued" and lid == "gb300-15m":
             state = "paused"  # the queue's first lane, outside its night hours
         left = max(0, total - done)
         row = dict(id=lid, machine=mach, model=model, unit=unit, deep=deep, min=mn, done=done, total=total,
@@ -115,6 +118,10 @@ def main():
             row["finish"] = fin.strftime("%Y-%m-%d %H:%M")
             clock[mach] = fin
         out.append(row)
+    for mach in ("gb300", "z.ai"):  # one lane reads at a time on a machine: the one that wrote last
+        live = [r for r in out if r["machine"] == mach and r["state"] == "running"]
+        for r in sorted(live, key=lambda r: r["last"])[:-1]:
+            r["state"] = "queued"
     for mach in ("gb300", "z.ai"):  # a lane before the machine's running one has finished its pass: windows left came in since
         rows = [r for r in out if r["machine"] == mach]
         cur = next((i for i, r in enumerate(rows) if r["state"] in ("running", "paused")), None)
