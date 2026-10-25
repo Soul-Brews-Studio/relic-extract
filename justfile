@@ -101,4 +101,8 @@ publish:
     gitleaks dir ~/.relic-extract/report-share --no-banner --redact
     rm -rf report/site/public && mkdir -p report/site/public/report
     cp ~/.relic-extract/report-share/index.html report/site/public/report/index.html
+    uv run python report/md.py ~/.relic-extract/report-share
+    for f in index.md llms.txt report.json monthly.parquet; do cp ~/.relic-extract/report-share/$f report/site/public/report/; done
+    gitleaks dir report/site/public --no-banner --redact
+    ! rg -q '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' report/site/public
     cd report/site && npx -y wrangler@4 deploy
