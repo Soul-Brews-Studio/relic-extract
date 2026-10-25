@@ -1,0 +1,13 @@
+$ git log --oneline 8bbefad..HEAD -- report
+b60da3a status: leave out windows whose prompts are all under 8 characters (readings.py and blocks.py skip the
+f18aaab status: count gb300's day/3h/1h windows with the cache keys days.py and blocks.py really write (model|
+ae3ceaf status: a gb300 day/3h/1h lane counts as running while its cache file changes (days.py and blocks.py l
+be9089c gb300 day and night (Nat: "make it work asap"): readings.py --gb-workers N sends N requests at a time 
+22f3928 status: pace each lane over the hour before its own last answer, so a lane paused at 08:00 keeps the p
+8f312ac report: serve the report as Markdown for an AI to read — md.py writes index.md (what is running now, t
+d259e64 report: "What we are working on now" — each reading lane's windows read of all, pace in the last hour 
+d4d2ac7 build: share and public views write <session> for any session id — Claude Code's per-session scratchpa
+dd14814 trial: --windows CACHE reads one frozen window set for every model (--sample drifted as live windows a
+d70479b trial: compare models on the same windows — readings.py --sample N reads N windows spread over the yea
+be7b399 readings, days: one prompt per window, run after run — ties in time (same second, common since the mer
+(exit 0 · 0.0 s)

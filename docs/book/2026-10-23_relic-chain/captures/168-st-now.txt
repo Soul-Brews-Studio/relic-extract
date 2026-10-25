@@ -1,0 +1,11 @@
+$ uv run python report/status.py
+  gb300-15m  done     15,437 of 15,440 ·    0/h · finish -
+  gb300-day  done        345 of    346 ·    0/h · finish -
+  gb300-3h   done      2,083 of  2,085 ·    0/h · finish -
+  gb300-1h   done      4,973 of  4,974 ·    0/h · finish -
+  zai-day    done        320 of    337 ·    0/h · finish -
+  zai-3h     done      1,989 of  2,085 ·    0/h · finish -
+  zai-1h     done      4,959 of  4,974 ·    0/h · finish -
+  zai-15m    running   8,925 of 15,440 ·  427/h · finish 2026-10-26 18:12
+status: 8 lanes · 02:57 -> /Users/beta/.relic-extract/report/status.json
+(exit 0 · 6.1 s)

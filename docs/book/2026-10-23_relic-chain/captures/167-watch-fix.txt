@@ -1,0 +1,10 @@
+$ diff relic-watch.sh.bak-20261025 relic-watch.sh
+9c9,13
+<   OUT=$(uv run python report/status.py 2>&1)
+---
+>   OUT=$(uv run python report/status.py 2>&1); SRC=$?
+>   if (( SRC != 0 )); then  # a parquet caught mid-write by relic-scan / relic-extract: try again in 2 minutes
+>     echo "$(date '+%a %H:%M') status.py rc=$SRC, retry in 120 s: $(print -r -- "$OUT" | tail -1)"
+>     sleep 120; continue
+>   fi
+(exit 1 · 0.0 s)

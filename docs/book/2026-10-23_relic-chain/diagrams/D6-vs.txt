@@ -1,0 +1,12 @@
+ two models, the same windows of a year (caches as of 2026-10-26 02:57 +07)
+ gb300 qwen3:14b, one request at a time · z.ai glm-5.3, 8 at a time, thinking on
+
+ grain  both read  same type  median s gb300  median s z.ai   z.ai says "mixed"
+ ─────  ─────────  ─────────  ──────────────  ─────────────  ─────────────────
+ day          320        45%             3.4           74.6                35%
+ 3h         1,989        54%             3.1           66.0                19%
+ 1h         4,959        52%             2.8           49.2                16%
+ 15m        8,925        52%             2.7           54.9                15%
+
+ the split they disagree on most, at every grain: gb300 "build"
+ 15m deep: gb300 names no friction in 96% of windows · z.ai in 14%

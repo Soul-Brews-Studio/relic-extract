@@ -1,0 +1,13 @@
+$ python3 vs.py example
+window 2026-06-10 00:15
+-- gb300 qwen3:14b · 11.3 s
+  type     mixed
+  focus    Switching between projects to debug and plan tasks, with a focus on the transcriber-oracle and mawjs-oracle projects.
+  friction none
+  lesson   Switching between projects frequently can slow down focused work, but it's necessary for managing multiple tasks.
+-- z.ai glm-5.3 · 66.6 s
+  type     fix
+  focus    Root-causing why `maw serve` in the Soul-Brews-Studio/maw-js repo hangs at startup, after the peer-startup-warnings hook hypothesis was disproven.
+  friction The first maw-js hypothesis (peer-startup-warnings hook) was disproven — the hook runs after Bun.serve() with no network calls — forcing a second, mor
+  lesson   Before blaming a hook for a startup hang, verify its execution order and network behavior, and carry the ruled-out hypothesis into the next investigat
+(exit 0 · 0.2 s)

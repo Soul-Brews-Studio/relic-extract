@@ -1,6 +1,6 @@
 # REVIEW-auto — mechanical checks (verify.py), no LLM
 
-1 findings in 13 chapters · image 1
+1 findings in 17 chapters · image 1
 
 09-windows.md:143 [image] image is not directly under a code block
 
