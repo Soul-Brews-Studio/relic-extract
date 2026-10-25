@@ -5,7 +5,7 @@
 A lane ahead of its machine's running lane has finished its pass; its windows not read are new since ("new").
 A window counts as read when its lane's cache holds it (an older reading of a window whose prompts changed since
 counts too, so "read" can run ahead of the lane's own count by the windows it will read again). Pace = answers
-logged in readings.jsonl in the last hour (per minute since its first, for a lane that started inside the hour); finish = windows left / pace. The gb300 lanes run one at a time, in
+logged in readings.jsonl in the hour before the lane's last answer (per minute since its first, for a lane that started inside it); finish = windows left / pace. The gb300 lanes run one at a time, in
 the queue's order, only between 23:00 and 08:00 (Bangkok); the z.ai lanes run one after another, day and night.
 Counts and model names only: no reading text, no session id.
 """
@@ -48,13 +48,15 @@ def windows(con, unit, mn):
 
 
 def pace(now):
-    """Answers per lane in the last hour, and when each lane last answered (the tail of readings.jsonl only)."""
-    n, last, first = {}, {}, {}
+    """Answers per hour for each lane over the hour before its own last answer (so a paused lane keeps the pace it
+    ran at), counted per minute since the first answer in that hour when it started inside it; and when each lane
+    last answered. Reads the tail of readings.jsonl only."""
+    ts = {}
     f = OUT / "readings.jsonl"
     if not f.exists():
-        return n, last
+        return {}, {}
     with open(f, "rb") as fh:
-        fh.seek(max(0, f.stat().st_size - 12_000_000))
+        fh.seek(max(0, f.stat().st_size - 40_000_000))
         fh.readline()
         for line in fh:
             try:
@@ -62,13 +64,14 @@ def pace(now):
                 at = dt.datetime.strptime(r["at"], "%Y-%m-%dT%H:%M:%S%z")
             except (ValueError, KeyError):
                 continue
-            k = (r["model"], r["unit"].split()[-1])
-            last[k] = max(last.get(k, at), at)
-            if (now - at).total_seconds() <= 3600:
-                n[k] = n.get(k, 0) + 1
-                first[k] = min(first.get(k, at), at)
-    # a lane that started inside the hour: answers per minute since its first answer, not per 60 minutes
-    return {k: round(v * 60 / max(10, (now - first[k]).total_seconds() / 60)) for k, v in n.items()}, last
+            ts.setdefault((r["model"], r["unit"].split()[-1]), []).append(at)
+    n, last = {}, {}
+    for k, v in ts.items():
+        end = max(v)
+        last[k] = end
+        win = [t for t in v if (end - t).total_seconds() <= 3600]
+        n[k] = round(len(win) * 60 / max(10, (end - min(win)).total_seconds() / 60))
+    return n, last
 
 
 def night_hours(start, hours):
@@ -118,6 +121,9 @@ def main():
         for i, r in enumerate(rows):
             if cur is not None and i < cur and r["state"] == "queued":
                 r["state"], r["new"] = "done", r["total"] - r["done"]
+    for r in out:
+        if r["state"] in ("done", "queued"):
+            r["per_hour"] = 0  # a pace is shown only for a lane that reads now or between its nights
     trial = None
     tf = OUT / "trial-set-3h.json"
     if tf.exists():  # the model trial (trial.py): the same 3h windows read by every model
