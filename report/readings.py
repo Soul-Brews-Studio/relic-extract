@@ -40,8 +40,9 @@ KEYS_DEEP = dy.KEYS + ("friction", "lesson")
 
 def snapshot(con):
     """Every user prompt (chunk 0, all tiers) with its project, copied into memory once. window_input reads only this:
-    15,000 queries over the parquet parts took 10-15 minutes, and relic-chain rewrites those parts every few minutes,
-    which left DuckDB waiting forever (2026-10-26 04:05-04:28, issue #38). Same rows, same order, so the same prompts."""
+    15,000 queries over the parquet parts took 10-15 minutes per start (issue #38); relic-chain also rewrites those
+    parts every few minutes, and a snapshot is not caught by that. Same rows, same order, so the same prompts.
+    (The 0%-CPU stall seen 2026-10-26 04:18-04:28 was not DuckDB: neo SIGSTOPped the job to cool m5.)"""
     con.execute("""create or replace temp table xw as select x.ts_th, x.tier, x.text, x.key, coalesce(ses.cat, x.cat) AS pcat
                    from x left join ses using (sid) where x.role = 'user' and x.chunk = 0""")
 
