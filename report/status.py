@@ -44,7 +44,9 @@ def windows(con, unit, mn):
     span = SPAN[unit]
     return con.execute(f"""select substr(ts_th, 1, 10) d, ((cast(substr(ts_th, 12, 2) as int) * 60 + cast(substr(ts_th, 15, 2) as int)) // {span}) * {span} m0
                            from x where role = 'user' and chunk = 0 and tier = 'main' and ts_th <> ''
-                           group by 1, 2 having count(distinct msgkey) >= ? order by 1, 2""", [mn]).fetchall()
+                           group by 1, 2 having count(distinct msgkey) >= ?
+                           and count(*) filter (where length(trim(text, ' \t\n\r')) >= 8) > 0 order by 1, 2""", [mn]).fetchall()
+    # the second test: a window whose prompts are all under 8 characters ("ok", "go") gives the lanes nothing to read, so they skip it
 
 
 def pace(now):
@@ -125,6 +127,8 @@ def main():
     for mach in ("gb300", "z.ai"):  # a lane before the machine's running one has finished its pass: windows left came in since
         rows = [r for r in out if r["machine"] == mach]
         cur = next((i for i, r in enumerate(rows) if r["state"] in ("running", "paused")), None)
+        if cur is None:
+            cur = len(rows)  # nothing reads on this machine: every lane has finished its pass
         for i, r in enumerate(rows):
             if cur is not None and i < cur and r["state"] == "queued":
                 r["state"], r["new"] = "done", r["total"] - r["done"]
