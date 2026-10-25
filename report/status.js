@@ -8,7 +8,7 @@ function statusSection() {
   const X = DATA.status;
   if (!X) return;
   const run = X.lanes.filter((r) => r.state === "running" || r.state === "paused");
-  const s = section(t("st.h"), t("st.lead", { at: X.at, n: run.length, a: X.night[0], b: X.night[1] }), (s) => {
+  const s = section(t("st.h"), X.night ? t("st.lead", { at: X.at, n: run.length, a: X.night[0], b: X.night[1] }) : t("st.lead2", { at: X.at, n: run.length }), (s) => {
     const tb = h("table", "st", null, s);
     const hr = h("tr", null, null, h("thead", null, null, tb));
     for (const k of ["st.lane", "st.window", "st.read", "st.pace", "st.state", "st.finish"]) h("th", null, t(k), hr);

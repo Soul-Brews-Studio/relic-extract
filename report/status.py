@@ -37,7 +37,7 @@ LANES = [
      lambda d, h, m: f"{d} {h:02d}:{m:02d}-{(h * 60 + m + 15) // 60:02d}:{(h * 60 + m + 15) % 60:02d}", "zai:glm-5.3 deep", "15m"),
 ]
 SPAN = {"day": 1440, "3h": 180, "1h": 60, "15m": 15}
-NIGHT = (23, 8)  # the gb300 queue's hours
+NIGHT = None  # the gb300 queue's hours, (23, 8) when it runs nights only; None = day and night (since 2026-10-25 08:38)
 
 
 def windows(con, unit, mn):
@@ -103,18 +103,25 @@ def main():
         rate = n_hr.get(k, 0)
         seen = last.get(k)
         live = seen is not None and (now - seen).total_seconds() < 900
+        if not live and lmodel is None and p.exists():  # days.py / blocks.py log nothing to readings.jsonl: their cache moving is the sign
+            seen = dt.datetime.fromtimestamp(p.stat().st_mtime, BKK)
+            live = (now - seen).total_seconds() < 900
         state = "done" if done >= total else "running" if live else "queued"
-        if mach == "gb300" and state == "queued" and lid == "gb300-15m":
+        if NIGHT and mach == "gb300" and state == "queued" and lid == "gb300-15m":
             state = "paused"  # the queue's first lane, outside its night hours
         left = max(0, total - done)
         row = dict(id=lid, machine=mach, model=model, unit=unit, deep=deep, min=mn, done=done, total=total,
                    per_hour=rate, state=state, last=seen.strftime("%Y-%m-%d %H:%M") if seen else None)
         if state in ("running", "paused") and rate:
             hrs = left / rate
-            fin = night_hours(clock[mach], hrs) if mach == "gb300" else clock[mach] + dt.timedelta(hours=hrs)
+            fin = night_hours(clock[mach], hrs) if mach == "gb300" and NIGHT else clock[mach] + dt.timedelta(hours=hrs)
             row["finish"] = fin.strftime("%Y-%m-%d %H:%M")
             clock[mach] = fin
         out.append(row)
+    for mach in ("gb300", "z.ai"):  # one lane reads at a time on a machine: the one that wrote last
+        live = [r for r in out if r["machine"] == mach and r["state"] == "running"]
+        for r in sorted(live, key=lambda r: r["last"])[:-1]:
+            r["state"] = "queued"
     for mach in ("gb300", "z.ai"):  # a lane before the machine's running one has finished its pass: windows left came in since
         rows = [r for r in out if r["machine"] == mach]
         cur = next((i for i, r in enumerate(rows) if r["state"] in ("running", "paused")), None)
@@ -128,7 +135,7 @@ def main():
     tf = OUT / "trial-set-3h.json"
     if tf.exists():  # the model trial (trial.py): the same 3h windows read by every model
         trial = trial_summary()
-    res = dict(at=now.strftime("%Y-%m-%d %H:%M"), lanes=out, trial=trial, night=list(NIGHT))
+    res = dict(at=now.strftime("%Y-%m-%d %H:%M"), lanes=out, trial=trial, night=list(NIGHT) if NIGHT else None)
     f = OUT / "status.json"
     f.write_text(json.dumps(res, ensure_ascii=False, indent=1))
     os.chmod(f, 0o600)

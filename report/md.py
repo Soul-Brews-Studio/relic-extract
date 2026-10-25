@@ -47,7 +47,7 @@ def main():
     S = R.get("status")
     if S:
         md += ["## What we are working on now", "",
-               f"As of {S['at']} (Bangkok). gb300 lanes run one at a time, {S['night'][0]}:00-0{S['night'][1]}:00 only; z.ai lanes day and night. "
+               f"As of {S['at']} (Bangkok). " + (f"gb300 lanes run one at a time, {S['night'][0]}:00-0{S['night'][1]}:00 only; z.ai lanes day and night. " if S.get("night") else "On each machine the lanes run one after another, day and night. ") +
                "Finish = windows left / answers in the last hour, counted in the lane's own hours.", "",
                table(["machine", "model", "window", "read", "of", "share", "per hour", "state", "finish (Bangkok)"],
                      [[r["machine"], r["model"], r["unit"] + (" + friction, lesson" if r["deep"] else ""), f"{r['done']:,}", f"{r['total']:,}",
