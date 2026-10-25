@@ -25,9 +25,9 @@ BKK = dt.timezone(dt.timedelta(hours=7))
 LANES = [
     ("gb300-15m", "gb300", "qwen3:14b", "15m", True, 3, "readings-cache-15m-gb300-qwen3_14b-deep.json",
      lambda d, h, m: f"{d} {h:02d}:{m:02d}-{(h * 60 + m + 15) // 60:02d}:{(h * 60 + m + 15) % 60:02d}", "gb300:qwen3:14b deep", "15m"),
-    ("gb300-day", "gb300", "qwen3:14b", "day", False, 1, "days-cache.json", lambda d, h, m: d, None, None),
-    ("gb300-3h", "gb300", "qwen3:14b", "3h", False, 5, "blocks-cache.json", lambda d, h, m: f"qwen3:14b|{d}|{h}", None, None),
-    ("gb300-1h", "gb300", "qwen3:14b", "1h", False, 5, "blocks-cache-1h.json", lambda d, h, m: f"qwen3:14b|{d}|{h}-1h", None, None),
+    ("gb300-day", "gb300", "qwen3:14b", "day", False, 1, "days-cache.json", lambda d, h, m: f"qwen3:14b|{d}", None, None),
+    ("gb300-3h", "gb300", "qwen3:14b", "3h", False, 5, "blocks-cache.json", lambda d, h, m: f"qwen3:14b|{d}|{h:02d}", None, None),
+    ("gb300-1h", "gb300", "qwen3:14b", "1h", False, 5, "blocks-cache-1h.json", lambda d, h, m: f"qwen3:14b|{d}|{h:02d}-1h", None, None),
     ("zai-day", "z.ai", "glm-5.3", "day", False, 5, "readings-cache-day-zai-glm-5.3.json", lambda d, h, m: d, "zai:glm-5.3", "day"),
     ("zai-3h", "z.ai", "glm-5.3", "3h", False, 5, "readings-cache-3h-zai-glm-5.3.json",
      lambda d, h, m: f"{d} {h:02d}:00-{h + 3:02d}:00", "zai:glm-5.3", "3h"),
