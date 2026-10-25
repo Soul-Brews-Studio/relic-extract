@@ -1,0 +1,9 @@
+$ python3 vs.py trial
+the same 198 3-hour windows, five models (kept for gb300: qwen3:14b)
+  model                      median s  same type as z.ai
+  z.ai glm-5.3                   63.5          reference
+  qwen3:14b                       6.8                52%
+  Nemotron 3.5 Bolt E4B           4.5                50%
+  typhoon2.1-gemma3-12b          13.6                50%
+  qwen3:30b-a3b                   5.3                25%
+(exit 0 · 0.1 s)

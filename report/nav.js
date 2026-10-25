@@ -14,6 +14,8 @@
   const ov = h("section", "card", null, null);
   ov.id = "s-overview";
   main.insertBefore(ov, tiles.nextSibling);
+  const st = document.getElementById("s-status");  // status.js: what is being read right now, right under the overview
+  if (st) main.insertBefore(st, ov.nextSibling);
   h("h2", null, t("overview.h"), ov);
   h("p", "lead", t("overview.lead"), ov);
   const ul = h("ol", "findings", null, ov);

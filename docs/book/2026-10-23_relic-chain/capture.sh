@@ -38,7 +38,7 @@ runsh() {
 }
 
 date '+== capture start %H:%M:%S'
-$TOOLCMD --help > $C/00-help.txt 2>&1      # the help text: reviewers check every flag against it
+run 00 help -- --help      # the help text: reviewers check every flag against it
 
 # ── COMMANDS (one line per thing the book shows; group by chapter) ──────────
 # ch1 relic-scan: what is on the machine, what changed
@@ -54,7 +54,7 @@ runsh 12 analyse        "relic-extract analyse --months 2026-10 --top 4" "relic-
 runsh 13 whatif         "relic-extract analyse --months 2026-10 --what-if min_chars=24 --top 3 | head -14" "relic-extract analyse --months 2026-10 --what-if min_chars=24 --top 3 2>&1 | head -14"
 run    14 run            -- run --no-after
 runsh 15 parts          "ls ~/.relic-extract/text | head; cat ~/.relic-extract/text/_extract.json | head -12" "ls ~/.relic-extract/text | head; cat ~/.relic-extract/text/_extract.json | head -12"
-runsh 16 schema         "duckdb: one chunk row" "duckdb -c \"select month, chunk, role, cat, left(text, 40) AS text, left(key, 12) AS key from '\$HOME/.relic-extract/text/2026-10.parquet' limit 3\""
+runsh 16 schema         "duckdb -c \"select month, chunk, role, cat, left(text, 40) AS text, left(key, 12) AS key from '~/.relic-extract/text/2026-10.parquet' limit 3\"" "duckdb -c \"select month, chunk, role, cat, left(text, 40) AS text, left(key, 12) AS key from '\$HOME/.relic-extract/text/2026-10.parquet' limit 3\""
 runsh 17 config-clean   "sed -n '/streams.text.clean/,/redact/p' ~/.arra/relic.toml" "sed -n '/streams.text.clean/,/redact/p' ~/.arra/relic.toml"
 # ch3 embed on gb300
 runsh 20 gb300          "ssh gb300 nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv" "ssh -o BatchMode=yes gb300 nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv"
@@ -89,6 +89,8 @@ runsh 61 live           "curl -sI https://relic.buildwithoracle.com/report/" "cu
 runsh 90 just-list      "just --list" "just --list"
 runsh 91 sizes          "du -sh ~/.relic-scan ~/.relic-extract/* ~/relic4-fresh" "du -sh ~/.relic-scan ~/.relic-extract/text ~/.relic-extract/thinking ~/.relic-extract/tools ~/.relic-extract/vault ~/.relic-extract/report ~/relic4-fresh"
 runsh 92 git-log        "git log --oneline -12" "git log --oneline -12"
+runsh 93 errors         "python3 errors.py <this session>.jsonl" "python3 $B/errors.py $HOME/.claude/projects/-opt-Code-github-com-Soul-Brews-Studio-relic-extract/008db2b3-17a7-47f4-b118-742ebc7ae6e7.jsonl"
+runsh 94 zai-keys       "python3 zai-keys.py glm/zai-2 glm/zai-3 glm/nat-wrw" "python3 $B/zai-keys.py glm/zai-2 glm/zai-3 glm/nat-wrw"
 
 date '+== capture end %H:%M:%S'
 ls $C | wc -l

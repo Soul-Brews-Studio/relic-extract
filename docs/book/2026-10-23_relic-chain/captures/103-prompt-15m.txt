@@ -1,0 +1,5 @@
+$ rg -n 'these 15 minutes|Describe the day' report/readings.py
+186:            for w0, w1 in (("Describe the day", "Describe these 15 minutes"), ("the day's prompts", "these 15 minutes' prompts"),
+187:                           ("if the day stayed", "if these 15 minutes stayed"), ("the day was mostly about", "these 15 minutes were mostly about"),
+188:                           ("worked today", "worked in these 15 minutes")):
+(exit 0 · 0.0 s)

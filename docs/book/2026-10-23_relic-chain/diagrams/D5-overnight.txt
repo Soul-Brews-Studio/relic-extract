@@ -1,0 +1,15 @@
+ a long job through the day: the 15-minute gb300 lane, 2026-10-24 (+07)
+ 15,143 windows · one at a time · ~2.4 s each · stops 08:00, resumes 23:00, 3 nights at most
+
+ time   what happened                          fix                       commit
+ ─────  ─────────────────────────────────────  ────────────────────────  ───────
+ 03:31  ssh tunnel drops: Errno 61, 3 retries   ServerAlive + reopen      cdec387
+ 08:11  scan index rewritten: 3,048 sessions    relic4-scan restores it   08:15
+ 08:28  lane restarts under the cycle script    stop 08:00, resume 23:00  -
+ 09:13  -                                       autossh when installed    ed600e7
+ 13:18  tunnel opens again by itself            58 s pause, nothing lost  -
+ 13:52  every .claude home merged into scan     49,774 -> 101,183 sess.  -
+ 14:3x  8,400 deep windows lack friction        days.ask keeps all keys   32368be
+ 14:3x  the kill did not save the cache         no with-block, SIGHUP     32368be
+ 14:4x  a 2nd signal lands inside the save      ignore after the first    63b2c79
+ 14:54  one gb300 queue: 15m, day, 3h, 1h       unchanged windows cached  -

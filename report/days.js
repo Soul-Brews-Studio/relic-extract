@@ -1,6 +1,6 @@
 // Day by day (days.py): a calendar of the whole span (one cell a day, darker = more main-session prompts), and
 // dayList(month, parent) for the month chapters: every day's numbers, its topics, and the gb300 model's summary.
-/* global DATA, h, fmtN, fmtP, section, t, LANG, showTip, hideTip */
+/* global DATA, h, fmtN, fmtP, section, t, LANG, showTip, hideTip, blockList */
 
 const DAYS = DATA.days ? Object.fromEntries(DATA.days.days.map((d) => [d.day, d])) : {};
 
@@ -32,6 +32,7 @@ function dayList(month, parent) {
     h("div", "ex", t("day.row", { p: fmtN(d.prompts_main || 0), a: fmtN(d.prompts_agent || 0), c: fmtN(d.tool_calls || 0),
       e: fmtN(d.tool_errors || 0), hrs: (d.hours || []).length }) + (d.topics && d.topics.length ? " · " + d.topics.slice(0, 3).map((x) => x[0]).join(" · ") : "")
       + (d.repos && d.repos.length ? " · " + d.repos.slice(0, 2).map((x) => x[0]).join(", ") : ""), c);
+    if (typeof blockList === "function") blockList(d.day, c);
   });
 }
 

@@ -1,0 +1,10 @@
+$ python3 vs.py opening
+ day gb300     345 readings · top openings: "The day was spent" 63% | "The day was focused" 18% | "The day was primarily" 10%
+ day z.ai      320 readings · top openings: "Most of the day" 9% | "The day belonged to" 8% | "Nat spent the day" 6%
+  3h gb300   2,083 readings · top openings: "The day was spent" 59% | "The day was primarily" 15% | "The day was focused" 13%
+  3h z.ai    1,989 readings · top openings: "The block was mostly" 3% | "Nat spent the block" 3% | "Most of the block" 3%
+  1h gb300   4,973 readings · top openings: "The day was spent" 69% | "The day was focused" 15% | "The day was primarily" 9%
+  1h z.ai    4,959 readings · top openings: "The hour was mostly" 7% | "The hour went to" 7% | "Nat spent the hour" 7%
+ 15m gb300  15,437 readings · top openings: "The person spent 15" 66% | "The person worked on" 16% | "The person focused on" 14%
+ 15m z.ai    8,925 readings · top openings: "These 15 minutes were" 24% | "In these 15 minutes" 6% | "These 15 minutes went" 5%
+(exit 0 · 0.5 s)

@@ -1,0 +1,10 @@
+$ the 1-hour lane, as its pane reported (blocks.py --hours 1)
+-- arrived 2026-10-23T19:53:28Z
+PANE w12:pT hourly rc=0
+  2026-10-23 21-22 · 116 prompts · 5 projects · 3.7s · build · The day was focused on building and refining the relic5 MCP server, integrating
+  2026-10-23 22-23 · 57 prompts · 5 projects · 4.4s · build · The day was focused on building and refining tools for relic5, relic4-scan, and
+blocks: 4462 1-hour blocks over 313 days · 12940s -> /Users/beta/.relic-extract/report/blocks-1h.json
+  block types [('build', 3089), ('ops', 495), ('fix', 327), ('mixed', 195), ('research', 178), ('writing', 90)]
+  on days with 3+ blocks: the day's top project leads 49% of its blocks; 4.53 different lead projects a day
+== hourly done in 12940s
+(exit 0 · 0.1 s)

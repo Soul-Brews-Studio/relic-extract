@@ -15,7 +15,10 @@ answers type, focus, distraction, work, agents, pattern, and two-sentence summar
 import argparse
 import hashlib
 import json
+import os
 import re
+import shutil
+import signal
 import socket
 import subprocess
 import time
@@ -65,7 +68,32 @@ Prompts agents wrote for other agents (project, start of text):
 """
 
 
+_TUN = {}  # port -> host, so ask() can reopen a tunnel that dropped mid-run
+
+
+def _ssh_tunnel(host, port):
+    """autossh when installed (it restarts ssh by itself when the link drops; -M 0 = watch with ServerAlive, no
+    monitor port), else plain ssh; either way ask() reopens the port if it is still gone."""
+    opts = ["-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3",
+            "-N", "-L", f"{port}:127.0.0.1:11434", host]
+    if shutil.which("autossh"):
+        return subprocess.Popen(["autossh", "-M", "0", *opts], env={**os.environ, "AUTOSSH_GATETIME": "0"})
+    return subprocess.Popen(["ssh", *opts])
+
+
+def _reopen(port):
+    """An ssh tunnel can drop in a long run (seen 2026-10-24 after 825 of 13,724 windows): open it again."""
+    host, s = _TUN.get(port), socket.socket()
+    if not host or s.connect_ex(("127.0.0.1", port)) == 0:
+        s.close()
+        return
+    _ssh_tunnel(host, port)
+    print(f"    tunnel to {host} reopened", flush=True)
+    time.sleep(3)
+
+
 def tunnel(host, model, port=11447):
+    _TUN[port] = host
     s = socket.socket()
     if s.connect_ex(("127.0.0.1", port)) == 0:  # something listens already: use it only if it is an ollama with the model
         s.close()
@@ -73,7 +101,7 @@ def tunnel(host, model, port=11447):
         if not any(m["name"].split(":")[0] == model.split(":")[0] for m in tags.get("models", [])):
             raise SystemExit(f"127.0.0.1:{port} is not an ollama holding {model}: pick another port")
         return None
-    p = subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-N", "-L", f"{port}:127.0.0.1:11434", host])
+    p = _ssh_tunnel(host, port)
     for _ in range(50):
         time.sleep(0.2)
         s = socket.socket()
@@ -96,7 +124,8 @@ def keep(unit, model, prompt, answer, secs):
     LOG.chmod(0o600)
 
 
-def ask(model, prompt, port=11447):
+def ask(model, prompt, port=11447, keys=None):
+    """keys: the answer keys to keep (KEYS by default; readings.py --deep adds friction and lesson)."""
     body = json.dumps({"model": model, "prompt": prompt, "stream": False, "format": "json", "think": False,
                        "options": {"temperature": 0.2, "num_ctx": 16384}}).encode()
     req = urllib.request.Request(f"http://127.0.0.1:{port}/api/generate", body, {"Content-Type": "application/json"})
@@ -110,9 +139,10 @@ def ask(model, prompt, port=11447):
                 raise
             print(f"    retry {attempt + 1}: {ex.__class__.__name__}", flush=True)
             time.sleep(5 * (attempt + 1))
+            _reopen(port)
     try:
         j = json.loads(out)
-        return {k: j.get(k) for k in KEYS} | {"json_ok": True}
+        return {k: j.get(k) for k in (keys or KEYS)} | {"json_ok": True}
     except Exception:
         return {"en": out.strip()[:600], "th": "", "json_ok": False}
 
@@ -122,7 +152,7 @@ def day_input(con, d, h0=0, h1=24):
     day = f"substr(x.ts_th, 1, 10) = ? and cast(substr(x.ts_th, 12, 2) as int) >= {int(h0)} and cast(substr(x.ts_th, 12, 2) as int) < {int(h1)} and true"
     rows = con.execute(f"""select substr(x.ts_th, 12, 5) AS hm, coalesce(ses.cat, x.cat) AS cat, x.text, x.key
                            from x left join ses using (sid) where x.role = 'user' and x.chunk = 0 and x.tier = 'main'
-                           and {day} order by x.ts_th""", [d]).fetchall()
+                           and {day} order by x.ts_th, x.key, cat, x.text""", [d]).fetchall()   # a full order: ties (same second, the merged homes) came back in any order
     rows = [r for r in rows if len(r[2].strip()) >= 8]
     reps = Counter(r[3] for r in rows)
     loops = sum(n for n in reps.values() if n >= 3)
@@ -133,9 +163,9 @@ def day_input(con, d, h0=0, h1=24):
             uniq.append(r)
     cats = Counter(r[1] for r in rows)
     switches = sum(1 for a, b in zip(rows, rows[1:]) if a[1] != b[1])
-    agents = con.execute(f"""select coalesce(ses.cat, x.cat), any_value(x.text) from x left join ses using (sid)
+    agents = con.execute(f"""select coalesce(ses.cat, x.cat), min(x.text) from x left join ses using (sid)
                              where x.role = 'user' and x.chunk = 0 and x.tier <> 'main' and {day} group by 1, x.key
-                             order by random() limit 12""", [d]).fetchall()
+                             order by md5(x.key) limit 12""", [d]).fetchall()
     shape = dict(prompts=len(rows), distinct=len(uniq), loop_prompts=loops, projects=len(cats),
                  top_project=cats.most_common(1)[0][0] if cats else None,
                  top_share=round(cats.most_common(1)[0][1] / len(rows), 2) if rows else 0,
@@ -147,7 +177,19 @@ def day_input(con, d, h0=0, h1=24):
     return shape, lines, alines
 
 
+def on_stop():
+    """A kill (SIGTERM, or SIGHUP when the pane closes) runs the finally blocks like Ctrl-C, so the cache is saved and
+    the next run resumes (the gb300 queue stops each lane at 08:00)."""
+    def _stop(*_):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second signal would land inside the save
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGHUP, _stop)
+
+
 def main():
+    on_stop()
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--model", default="qwen3:14b")

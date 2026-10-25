@@ -1,0 +1,8 @@
+$ python3 lanes.py
+lane           windows  days  build   ops   fix  res+wr  mix+pl   lead  proj/d
+day gb300          326   326    80%    7%    2%      7%      4%      -       -
+day zai            316   316    46%   11%    7%      5%     32%      -       -
+3h gb300         1,909   316    67%   12%    5%      8%      8%    51%    3.32
+3h zai           1,915   316    44%   19%   10%      7%     20%    51%    3.23
+1h gb300         4,462   313    69%   11%    7%      6%      6%    49%    4.53
+(exit 0 · 0.1 s)

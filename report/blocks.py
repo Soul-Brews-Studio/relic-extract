@@ -23,6 +23,7 @@ OUT = HOME / ".relic-extract" / "report"
 
 
 def main():
+    dy.on_stop()
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3:14b")
     ap.add_argument("--host", default="gb300")
@@ -80,17 +81,18 @@ def main():
         day = days.get(d) or {}
         ds = day.get("summary") or {}
         top = (day.get("shape") or {}).get("top_project")
-        btops = [b["shape"]["top_project"] for b in bs]
+        btops = [t for t in (b["shape"]["top_project"] for b in bs) if t]  # a block with no project counts for neither
         types = Counter(str(b["reading"].get("type")) for b in bs)
         cmp.append(dict(day=d, blocks=len(bs), day_type=ds.get("type"), block_types=types.most_common(),
-                        day_top=top, led=sum(1 for t in btops if t == top), focus_projects=len(set(btops)),
+                        day_top=top, led=sum(1 for t in btops if t == top), named=len(btops), focus_projects=len(set(btops)),
                         day_focus=ds.get("focus")))
-    multi = [c for c in cmp if c["blocks"] >= 3]
+    # the rule windows.js leadStats uses too: days with 3+ blocks, each day's share averaged
+    multi = [c for c in cmp if c["blocks"] >= 3 and c["day_top"] and c["named"]]
     summary = dict(
         blocks=len(out), days=len(cmp),
         types=Counter(str(b["reading"].get("type")) for b in out).most_common(),
         day_types=Counter(str((days.get(d) or {}).get("summary", {}) and (days[d]["summary"] or {}).get("type")) for d in by_day).most_common(),
-        day_top_leads=round(sum(c["led"] / c["blocks"] for c in multi) / max(1, len(multi)), 3),
+        day_top_leads=round(sum(c["led"] / c["named"] for c in multi) / max(1, len(multi)), 3),
         mean_focus_projects=round(sum(c["focus_projects"] for c in multi) / max(1, len(multi)), 2),
         by_hour=sorted(Counter(b["h0"] for b in out).items()))
     dst = OUT / f"blocks{tag}.json"
