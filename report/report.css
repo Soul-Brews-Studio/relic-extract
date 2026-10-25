@@ -172,3 +172,14 @@ table.days td:first-child { width: 48px; }
 .blocks { margin-top: 6px; display: grid; gap: 2px; }
 .blocks .lg-box { display: inline-block; vertical-align: middle; }
 table.topics td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* status.js: what is being read right now */
+table.st { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0 10px; }
+table.st th { text-align: left; color: var(--ink-2); font-weight: 500; border-bottom: 1px solid var(--grid); padding: 4px 6px; }
+table.st td { padding: 5px 6px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; vertical-align: middle; }
+table.st td.st-read { min-width: 180px; }
+table.st td.st-read .mbar { display: block; margin-bottom: 3px; }
+table.st td.st-read .mn { display: block; text-align: left; }
+tr.st-running td:nth-child(5), tr.st-paused td:nth-child(5) { font-weight: 600; }
+tr.st-done td, tr.st-queued td { color: var(--ink-2); }
+tr.st-kept td { font-weight: 600; }
