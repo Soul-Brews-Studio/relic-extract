@@ -68,6 +68,7 @@ def window_input(con, d, m0, m1):
 
 
 _zkeys, _zlock, _zi = [], threading.Lock(), [0]
+_zname = {}   # key -> its pass entry name, so a log line can say which key without printing it
 ZAI_PASS = ("glm/zai-2", "glm/zai-3", "glm/nat-wrw")   # several keys share the load; a 429 on one backs off without stopping the rest
 
 
@@ -78,6 +79,7 @@ def _zai_key():
                 k = subprocess.run(["pass", "show", e], capture_output=True, text=True).stdout.splitlines()
                 if k and k[0].strip():
                     _zkeys.append(k[0].strip())
+                    _zname[k[0].strip()] = e
         if not _zkeys:
             raise RuntimeError("z.ai: no key left (every key is out of balance)")
         _zi[0] += 1
@@ -89,7 +91,7 @@ def _zai_drop(key):
     with _zlock:
         if key in _zkeys and len(_zkeys) > 1:
             _zkeys.remove(key)
-            print(f"  z.ai: a key is out of balance (1113), {len(_zkeys)} left", flush=True)
+            print(f"  z.ai: {_zname.get(key, '?')} is out of balance (1113), {len(_zkeys)} left", flush=True)
 
 
 def _zai_call(model, prompt, think):
@@ -106,15 +108,22 @@ def _zai_call(model, prompt, think):
                 j = json.loads(r.read())
             break
         except urllib.error.HTTPError as e:
-            if b"1113" in e.read() or e.code == 401:
+            body = e.read()
+            if b"1113" in body or e.code == 401:
                 _zai_drop(key)
             if attempt == 8:
                 raise
             wait = e.headers.get("retry-after") if e.code == 429 else None
-            time.sleep(float(wait) if wait and wait.replace(".", "").isdigit() else min(120, 10 * 2 ** attempt if e.code == 429 else 5 * (attempt + 1)))
-        except Exception:
+            secs = float(wait) if wait and wait.replace(".", "").isdigit() else min(120, 10 * 2 ** attempt if e.code == 429 else 5 * (attempt + 1))
+            code = re.search(rb'"code":\s*"?(\d+)', body)
+            # every retry is printed (key by its pass name, never the key): a rate limit used to be invisible in the pane
+            print(f"  z.ai: HTTP {e.code} code {code.group(1).decode() if code else '-'} on {_zname.get(key, '?')}, "
+                  f"try {attempt + 1}/9, retry in {secs:.0f}s", flush=True)
+            time.sleep(secs)
+        except Exception as e:
             if attempt == 8:
                 raise
+            print(f"  z.ai: {e.__class__.__name__} on {_zname.get(key, '?')}, try {attempt + 1}/9, retry in {5 * (attempt + 1)}s", flush=True)
             time.sleep(5 * (attempt + 1))
     return "".join(c.get("text", "") for c in j.get("content", []) if c.get("type") == "text"), j.get("stop_reason")
 
