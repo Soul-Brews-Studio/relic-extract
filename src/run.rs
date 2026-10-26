@@ -161,9 +161,14 @@ pub fn after(cfg: &Config, done: &[extract::Done]) -> Result<(), String> {
     }
 }
 
-pub fn status(cfg: &Config) {
+/// Per stream: months cut, chunks, distinct texts, newest message. `json`: one object for scripts,
+/// `{"out": …, "streams": {"text": {"enabled": true, "months": 15, "chunks": …, "distinct": …, "newest": …}, …}}`;
+/// a stream with no parts has months 0 and chunks 0; one that cannot be read has an "error" field instead.
+pub fn status(cfg: &Config, json: bool) {
+    let mut streams = serde_json::Map::new();
     for name in config::STREAMS {
-        let on = if cfg.stream(name)["enabled"] == true { "on " } else { "off" };
+        let enabled = cfg.stream(name)["enabled"] == true;
+        let on = if enabled { "on " } else { "off" };
         let d = Path::new(cfg.out()).join(name);
         let mut parts: Vec<_> = fs::read_dir(&d)
             .into_iter()
@@ -173,23 +178,41 @@ pub fn status(cfg: &Config) {
             .filter(|p| p.extension().is_some_and(|x| x == "parquet"))
             .collect();
         parts.sort();
+        let mut row = serde_json::json!({"enabled": enabled, "months": parts.len()});
         if parts.is_empty() {
-            println!("{name:9} {on}  no parts");
-            continue;
-        }
-        let (n, u, last) = match crate::read::part_stats(&parts) {
-            Ok(x) => x,
-            Err(e) => {
-                println!("{name:9} {on}  ✗ {e}");
-                continue;
+            row["chunks"] = 0.into();
+            row["distinct"] = 0.into();
+            row["newest"] = serde_json::Value::Null;
+            if !json {
+                println!("{name:9} {on}  no parts");
             }
-        };
-        println!(
-            "{name:9} {on}  {} months · {} chunks · {} distinct texts · newest {}",
-            parts.len(),
-            extract::num(n),
-            extract::num(u),
-            last.unwrap_or_default()
-        );
+        } else {
+            match crate::read::part_stats(&parts) {
+                Ok((n, u, last)) => {
+                    row["chunks"] = n.into();
+                    row["distinct"] = u.into();
+                    row["newest"] = last.clone().map_or(serde_json::Value::Null, Into::into);
+                    if !json {
+                        println!(
+                            "{name:9} {on}  {} months · {} chunks · {} distinct texts · newest {}",
+                            parts.len(),
+                            extract::num(n),
+                            extract::num(u),
+                            last.unwrap_or_default()
+                        );
+                    }
+                }
+                Err(e) => {
+                    row["error"] = e.to_string().into();
+                    if !json {
+                        println!("{name:9} {on}  ✗ {e}");
+                    }
+                }
+            }
+        }
+        streams.insert(name.to_string(), row);
+    }
+    if json {
+        println!("{}", serde_json::json!({"out": cfg.out(), "streams": streams}));
     }
 }

@@ -3,7 +3,7 @@
 //!   relic-extract init        write ~/.arra/relic.toml with the defaults, if it is missing
 //!   relic-extract config      the [extract] settings in effect (file merged over the defaults)
 //!   relic-extract run         relic-scan months -> OUT/<stream>/YYYY-MM.parquet (only what changed)
-//!   relic-extract status      per stream: months cut, chunks, distinct texts, newest ts
+//!   relic-extract status      per stream: months cut, chunks, distinct texts, newest ts (--json for scripts)
 
 use clap::{Parser, Subcommand};
 use relic_extract::{analyse, config, extract, run, tui};
@@ -46,7 +46,11 @@ enum Cmd {
         no_after: bool,
     },
     /// Per stream: months, chunks, distinct texts, newest message
-    Status,
+    Status {
+        /// one JSON object instead of the table (for scripts: relic5's SYNC check)
+        #[arg(long)]
+        json: bool,
+    },
     /// The analyse report in the terminal: overview, months, clean rules with samples, biggest, repeats, repos
     Tui {
         /// only these months, comma separated: 2026-09,2026-10
@@ -141,7 +145,7 @@ fn main() {
                 run::after(&cfg, &done).unwrap_or_else(|e| fail(e));
             }
         }
-        Cmd::Status => run::status(&cfg),
+        Cmd::Status { json } => run::status(&cfg, json),
         Cmd::Tui { months, stream, what_if } => {
             if !config::STREAMS.contains(&stream.as_str()) {
                 fail(format!("unknown stream {stream} (known: {})", config::STREAMS.join(", ")));
