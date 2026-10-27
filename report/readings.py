@@ -5,6 +5,9 @@
 
 --model  gb300:<ollama model> (ssh tunnel to gb300's ollama, one request at a time) or zai:<model> (z.ai's
          Anthropic-compatible API, key from `pass show glm/zai-2`, never printed; --workers requests at a time)
+         or fm:system (Apple's on-device model, macOS 27 `fm respond --schema`; nothing leaves the tailnet).
+--fm-hosts  fm lane: one worker per Mac, `local` or an ssh host (default local). fm answers one request at a time
+         per machine (4 at once on m5 took as long as 4 in a row), so more Macs is the only way to go faster.
 --unit   day | 3h | 1h | 15m; a window is read when it holds at least --min main-session prompts
 --deep   two more keys: friction (what went wrong or pushed back) and lesson (one lesson learned, or "none")
 Same input as days.py (loops out, projects, switches, agent prompts) and the same v3 prompt. Cache per lane:
@@ -74,6 +77,49 @@ def window_input(con, d, m0, m1):
     lines = "\n".join(f"{hm} [{cat}] {re.sub(r'\s+', ' ', tx)[:280]}" for hm, cat, tx, _ in uniq[::step][:40])
     alines = "\n".join(f"[{cat}] {re.sub(r'\s+', ' ', tx)[:200]}" for cat, tx in agents) or "(none)"
     return shape, lines, alines
+
+
+FM_SCHEMA = {False: Path(__file__).with_name("fm-reading.schema.json"), True: Path(__file__).with_name("fm-reading-deep.schema.json")}
+FM_REMOTE = "~/.relic-extract/fm-reading{}.schema.json"   # copied to each ssh host at start
+
+
+def fm_cmd(host, deep):
+    """fm respond with the reading schema (guided generation, so the answer is always valid JSON), prompt on stdin."""
+    if host == "local":
+        return ["fm", "respond", "--no-stream", "--schema", str(FM_SCHEMA[deep])]
+    return ["ssh", "-o", "BatchMode=yes", host, f"NO_COLOR=1 fm respond --no-stream --schema {FM_REMOTE.format('-deep' if deep else '')}"]
+
+
+def fm_setup(hosts):
+    """Check every host has fm and a model, copy the schemas to the ssh hosts. Returns the hosts that work."""
+    ok = []
+    for h in hosts:
+        pre = [] if h == "local" else ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", h]
+        r = subprocess.run(pre + ["fm available"] if pre else ["fm", "available"], capture_output=True, text=True, timeout=60)
+        if r.returncode != 0 or "available" not in (r.stdout + r.stderr).lower():
+            print(f"fm: {h} has no fm model ({(r.stdout + r.stderr).strip()[-120:]}), skipped", flush=True)
+            continue
+        if pre:
+            for deep in (False, True):
+                subprocess.run(pre + [f"mkdir -p ~/.relic-extract && cat > {FM_REMOTE.format('-deep' if deep else '')}"],
+                               input=FM_SCHEMA[deep].read_text(), text=True, check=True, timeout=60)
+        ok.append(h)
+    if not ok:
+        raise SystemExit("fm: no host with a model")
+    return ok
+
+
+def ask_fm(prompt, keys, host, deep):
+    r = subprocess.run(fm_cmd(host, deep), input=prompt, capture_output=True, text=True, timeout=900,
+                       env={**__import__("os").environ, "NO_COLOR": "1"})
+    if r.returncode != 0:
+        raise RuntimeError(f"fm on {host}: rc {r.returncode}: {(r.stderr or r.stdout).strip()[-160:]}")
+    got = _parse(r.stdout, keys)
+    if got is None:
+        return {"en": r.stdout.strip()[:600], "th": "", "json_ok": False, "host": host}
+    if isinstance(got.get("work"), list):
+        got["work"] = got["work"][:4]
+    return got | {"json_ok": True, "host": host}
 
 
 _zkeys, _zlock, _zi = [], threading.Lock(), [0]
@@ -178,6 +224,7 @@ def main():
     ap.add_argument("--model", default="zai:glm-5.3")
     ap.add_argument("--deep", action="store_true")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--fm-hosts", default="local", help="fm lane: comma-separated Macs, `local` or ssh hosts (one worker each)")
     ap.add_argument("--gb-workers", type=int, default=1, help="requests at a time on gb300 (default 1)")
     ap.add_argument("--min", type=int, default=3)
     ap.add_argument("--limit", type=int, default=0)
@@ -270,16 +317,30 @@ def main():
         if got.get("h") == h and (not a.deep or "friction" in got):
             return label, shape, got, False
         t1 = time.time()
-        ans = ask_zai(model, prompt, keys) if lane == "zai" else dy.ask(model, prompt, keys=keys)
+        if lane == "zai":
+            ans = ask_zai(model, prompt, keys)
+        elif lane == "fm":
+            host = fm_free.get()   # one request at a time per Mac
+            try:
+                ans = ask_fm(prompt, keys, host, a.deep)
+            finally:
+                fm_free.put(host)
+        else:
+            ans = dy.ask(model, prompt, keys=keys)
         ans["secs"] = round(time.time() - t1, 1)
         dy.keep(f"{label} {a.unit}", a.model + (" deep" if a.deep else ""), prompt, ans, ans["secs"])
         return label, shape, dict(h=h, **ans), True
 
     tun = dy.tunnel("gb300", model) if lane == "gb300" else None
+    fm_free = __import__("queue").Queue()
+    if lane == "fm":
+        for h in fm_setup([h.strip() for h in a.fm_hosts.split(",") if h.strip()]):
+            fm_free.put(h)
+        print(f"fm: {fm_free.qsize()} worker(s): {', '.join(list(fm_free.queue))}", flush=True)
     out = []
     # no `with`: leaving a with-block waits for every queued window (hours), so a kill never reached the save
     # gb300: one request at a time unless --gb-workers asks for more (ollama runs them side by side on the shared GPU)
-    ex = ThreadPoolExecutor(max_workers=a.workers if lane == "zai" else a.gb_workers)
+    ex = ThreadPoolExecutor(max_workers=a.workers if lane == "zai" else fm_free.qsize() if lane == "fm" else a.gb_workers)
     try:
         futs = [ex.submit(one, j) for j in jobs]
         for f in as_completed(futs):

@@ -99,6 +99,10 @@ and again when its prompt changed (new scan data) or a lane re-read it. **The ne
 Lines from the 2026-10-24 five-model trial (200 3h windows each): `gb300:qwen3:14b`, `gb300:qwen3:30b-a3b`,
 `gb300:nemotron-bolt-e4b:q8`, `gb300:typhoon2.1-gemma3-12b:latest`. For an import, skip these.
 
+fm lane (2026-10-27): `model` = `fm:system` / `fm:system deep`, Apple's on-device model through macOS 27 `fm respond
+--schema report/fm-reading[-deep].schema.json` (always valid JSON). Each answer also carries `host` (the Mac that
+answered: `local` or an ssh host). It runs one request at a time per Mac, about 430 windows an hour on m5.
+
 Models: gb300 = korn's ollama on gb300 over an ssh tunnel (127.0.0.1:11447), one request at a time. This is not
 nazt's vLLM. z.ai = glm-5.3 over z.ai's Anthropic-compatible API.
 
