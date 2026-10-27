@@ -95,8 +95,10 @@ def fm_setup(hosts):
     ok = []
     for h in hosts:
         pre = [] if h == "local" else ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", h]
-        r = subprocess.run(pre + ["fm available"] if pre else ["fm", "available"], capture_output=True, text=True, timeout=60)
-        if r.returncode != 0 or "available" not in (r.stdout + r.stderr).lower():
+        r = subprocess.run(pre + ["NO_COLOR=1 fm available"] if pre else ["fm", "available"], capture_output=True, text=True,
+                           timeout=60, env={**__import__("os").environ, "NO_COLOR": "1"})
+        txt = r.stdout + r.stderr   # macOS 27.0: "System model available"; 27.2: "✓ system" / "✗ system  (modelNotReady)"
+        if r.returncode != 0 or not ("System model available" in txt or re.search(r"✓\s*system", txt)):
             print(f"fm: {h} has no fm model ({(r.stdout + r.stderr).strip()[-120:]}), skipped", flush=True)
             continue
         if pre:
