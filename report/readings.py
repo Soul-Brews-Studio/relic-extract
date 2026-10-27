@@ -98,7 +98,7 @@ def fm_setup(hosts):
         r = subprocess.run(pre + ["NO_COLOR=1 fm available"] if pre else ["fm", "available"], capture_output=True, text=True,
                            timeout=60, env={**__import__("os").environ, "NO_COLOR": "1"})
         txt = r.stdout + r.stderr   # macOS 27.0: "System model available"; 27.2: "✓ system" / "✗ system  (modelNotReady)"
-        if r.returncode != 0 or not ("System model available" in txt or re.search(r"✓\s*system", txt)):
+        if not ("System model available" in txt or re.search(r"✓\s*system", txt)):   # 27.2 exits 1 when pcc is off
             print(f"fm: {h} has no fm model ({(r.stdout + r.stderr).strip()[-120:]}), skipped", flush=True)
             continue
         if pre:
