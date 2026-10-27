@@ -111,17 +111,39 @@ def fm_setup(hosts):
     return ok
 
 
+_FM_LINE = re.compile(r"(?m)^\d\d:\d\d \[")   # a typed-prompt line in the window body (HH:MM [cat] ...)
+
+
+def _fm_shrink(prompt):
+    """Drop every other typed-prompt line (keep the first), so a window too big for fm's 8,192-token context fits on
+    retry. Returns None when there is nothing left to cut. The counts in `Numbers:` still describe the whole window."""
+    lines = prompt.split("\n")
+    body = [i for i, ln in enumerate(lines) if _FM_LINE.match(ln)]
+    if len(body) <= 2:
+        return None
+    drop = set(body[1::2])
+    return "\n".join(ln for i, ln in enumerate(lines) if i not in drop)
+
+
 def ask_fm(prompt, keys, host, deep):
-    r = subprocess.run(fm_cmd(host, deep), input=prompt, capture_output=True, text=True, timeout=900,
-                       env={**__import__("os").environ, "NO_COLOR": "1"})
-    if r.returncode != 0:
-        raise RuntimeError(f"fm on {host}: rc {r.returncode}: {(r.stderr or r.stdout).strip()[-160:]}")
-    got = _parse(r.stdout, keys)
-    if got is None:
-        return {"en": r.stdout.strip()[:600], "th": "", "json_ok": False, "host": host}
-    if isinstance(got.get("work"), list):
-        got["work"] = got["work"][:4]
-    return got | {"json_ok": True, "host": host}
+    for attempt in range(5):   # fm's context is 8,192 tokens; a big window overflows, so halve the lines and retry
+        r = subprocess.run(fm_cmd(host, deep), input=prompt, capture_output=True, text=True, timeout=900,
+                           env={**__import__("os").environ, "NO_COLOR": "1"})
+        err = (r.stderr or r.stdout)
+        if r.returncode != 0 and "context size" in err.lower():
+            sp = _fm_shrink(prompt)
+            if sp and len(sp) < len(prompt):
+                prompt = sp
+                continue
+        if r.returncode != 0:
+            raise RuntimeError(f"fm on {host}: rc {r.returncode}: {err.strip()[-160:]}")
+        got = _parse(r.stdout, keys)
+        if got is None:
+            return {"en": r.stdout.strip()[:600], "th": "", "json_ok": False, "host": host, "trimmed": attempt}
+        if isinstance(got.get("work"), list):
+            got["work"] = got["work"][:4]
+        return got | {"json_ok": True, "host": host, "trimmed": attempt}
+    raise RuntimeError(f"fm on {host}: still over context after trimming to {len(_FM_LINE.findall(prompt))} lines")
 
 
 _zkeys, _zlock, _zi = [], threading.Lock(), [0]
