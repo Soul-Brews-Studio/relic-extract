@@ -148,7 +148,8 @@ def ask_fm(prompt, keys, host, deep):
 
 _zkeys, _zlock, _zi = [], threading.Lock(), [0]
 _zname = {}   # key -> its pass entry name, so a log line can say which key without printing it
-ZAI_PASS = ("glm/zai-2", "glm/zai-3", "glm/nat-wrw")   # several keys share the load; a 429 on one backs off without stopping the rest
+ZAI_PASS = ("glm/zai-2", "glm/nat-wrw")   # several keys share the load; a 429 on one backs off without stopping the rest
+# glm/zai-3 dropped 2026-11-13 (Nat: "remove zai3"): out of balance, HTTP 429 code 1113 on every call
 
 
 def _zai_key():
