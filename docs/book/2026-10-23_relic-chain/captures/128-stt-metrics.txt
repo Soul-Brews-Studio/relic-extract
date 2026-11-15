@@ -1,5 +1,0 @@
-$ ssh gb300 cat stt-train/metrics.json   (best epoch and the n-gram baseline, same split)
-fine-tuned   {'auc': 0.995, 'ap': 0.876, 'threshold': 0.8, 'precision': 0.797, 'recall': 0.887, 'f1': 0.839, 'n': 1631, 'spoken': 53, 'epoch': 1}
-n-gram base  {'auc': 0.991, 'ap': 0.739, 'threshold': 0.85, 'precision': 0.646, 'recall': 0.792, 'f1': 0.712, 'n': 1631, 'spoken': 53}
-{'train': 6522, 'train_spoken': 210, 'held_out': 1631, 'held_out_spoken': 53, 'neg_per_pos': 30, 'epochs': 4, 'secs': 182}
-(exit 0 · 0.4 s)

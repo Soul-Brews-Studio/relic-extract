@@ -1,6 +1,0 @@
-$ RELIC4_ROOT=~/relic4-fresh just embed
-embed text-v2: 15 changed part(s) 2025-09, 2025-10, 2025-11, 2025-12, 2026-01, 2026-02, 2026-03, 2026-04, 2026-05, 2026-06, 2026-07, 2026-08, 2026-09, 2026-10, undated · 810,642 chunks · 725,318 distinct texts · in cache 723,108 · to embed 2,210 (remote)
-embed: gb300 2,210/2,210 (100%) · 142 texts/s incl. transfer · ETA 0 min
-embed: gb300 done in 15.6s -> 1 shard(s) in /Users/beta/relic4-fresh/vec/_cache/unsloth--embeddinggemma-300m@806f5f90
-embed text-v2: 810,642 rows in /Users/beta/relic4-fresh/vec/text-v2/unsloth--embeddinggemma-300m/text.lance (= parts) · write 7.0s · ICU index 5.4s · total 28.2s
-(exit 0 · 29.2 s)

@@ -1,9 +1,0 @@
-$ du -sh ~/.relic-scan ~/.relic-extract/* ~/relic4-fresh
-2.4G	/Users/beta/.relic-scan
-178M	/Users/beta/.relic-extract/text
- 17M	/Users/beta/.relic-extract/thinking
-291M	/Users/beta/.relic-extract/tools
-304M	/Users/beta/.relic-extract/vault
- 13M	/Users/beta/.relic-extract/report
- 23G	/Users/beta/relic4-fresh
-(exit 0 · 0.0 s)

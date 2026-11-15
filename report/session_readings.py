@@ -221,7 +221,7 @@ def main():
                 subprocess.run(["ssh", "-o", "BatchMode=yes", h, "mkdir -p ~/.relic-extract && cat > ~/.relic-extract/fm-session.schema.json"],
                                input=FM_SCHEMA.read_text(), text=True, check=True, timeout=60)
             fm_free.put(h)
-    tun = dy.tunnel("gb300", model) if lane == "gb300" else None
+    tun = dy.tunnel(dy.OLLAMA_HOST, model) if lane == "gb300" else None
     lock, done, t_start = threading.Lock(), [0], time.time()
 
     def one(s):

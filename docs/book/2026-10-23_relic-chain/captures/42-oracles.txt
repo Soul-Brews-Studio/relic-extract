@@ -1,9 +1,0 @@
-$ just oracles | tail -7
-uv run python report/oracles.py
-oracles: 433 oracles · 72 alive · born by {'awaken': 117, 'bud': 5, 'incubate': 13, 'herdr-work': 0, 'none': 298} · 3s
-  1 day          160 oracles · alive 8 · prompts 2,351 · ship 0.0 · friction 0.0 · how [('none', 138), ('awaken', 19), ('incubate', 2)]
-  2–7 days       132 oracles · alive 12 · prompts 16,430 · ship 0.0 · friction 0.0 · how [('none', 76), ('awaken', 50), ('incubate', 4)]
-  8–30 days       70 oracles · alive 15 · prompts 18,314 · ship 0.0 · friction 0.0 · how [('none', 39), ('awaken', 26), ('incubate', 3)]
-  31–90 days      30 oracles · alive 8 · prompts 23,908 · ship 0.0 · friction 0.0 · how [('none', 15), ('awaken', 12), ('incubate', 3)]
-  over 90 days    41 oracles · alive 29 · prompts 79,998 · ship 0.0 · friction 0.0 · how [('none', 30), ('awaken', 10), ('incubate', 1)]
-(exit 0 · 3.4 s)

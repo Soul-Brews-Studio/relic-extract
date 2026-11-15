@@ -1,9 +1,0 @@
-$ python3 progress.py
-at 2026-10-24 14:59 (+07)
-  15m-gb300-qwen3_14b-deep      100 / 15,143    0.7%  read with friction + lesson
-  day-zai-glm-5.3               316 windows cached
-  3h-zai-glm-5.3              1,915 windows cached
-  1h-zai-glm-5.3              1,525 windows cached
-  last 30 min  gb300:qwen3:14b deep     198 answers   7.27 s apart
-  last 30 min  zai:glm-5.3               83 answers  21.90 s apart
-(exit 0 · 0.4 s)

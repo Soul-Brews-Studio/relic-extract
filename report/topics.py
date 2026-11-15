@@ -168,7 +168,7 @@ def main():
     }
     # hand-given names (report/topic-names.json), keyed by a topic's first three words: when a re-run moves the
     # words, the name falls away and the words show instead of a stale name
-    names_f = Path(__file__).parent / "topic-names.json"
+    names_f = next((q for q in (Path.home() / ".relic-extract" / "report" / "topic-names.json", Path(__file__).parent / "topic-names.json") if q.exists()), Path("topic-names.json"))
     names = json.loads(names_f.read_text()) if names_f.exists() else {}
     used = set()
     for t in out["topics"]:

@@ -1,4 +1,0 @@
-$ ssh gb300 nvidia-smi …   (2026-10-24 23:59 +07, as it came back)
-utilization.gpu [%], memory.used [MiB]
-100 %, 161045 MiB
-(exit 0 · 0.2 s)

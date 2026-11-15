@@ -1,9 +1,0 @@
-$ python3 speed.py   (seconds per answer, per lane)
-gb300:qwen3:14b deep      15m   9,496 answers  median   2.4 s
-qwen3:14b                  1h   4,462 answers  median   2.8 s
-qwen3:14b                  3h   1,909 answers  median   3.1 s
-zai:glm-5.3                1h   1,534 answers  median  49.0 s
-zai:glm-5.3                3h   1,915 answers  median  56.8 s
-zai:glm-5.3               day     351 answers  median  72.2 s
-zai:glm-5.3 deep          15m       6 answers  median  31.1 s
-(exit 0 · 0.2 s)

@@ -1,3 +1,0 @@
-$ just report
-report: 14 months · 7,153,152 rows · 1,386 monthly values · 6.1s -> /Users/beta/.relic-extract/report/index.html
-(exit 0 · 13.5 s)

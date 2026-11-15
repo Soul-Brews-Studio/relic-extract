@@ -1,7 +1,0 @@
-$ python3 errors.py <this session>.jsonl
-19:43  duckdb alias  _duckdb.ParserException: Parser Error: syntax error at or near "days"
-22:14  z.ai 429      failed: HTTPError: HTTP Error 429: Too Many Requests
-22:14  z.ai 1302     glm/zai-2 HTTP 429 b'{"type":"error","error":{"type":"rate_limit_error
-22:14  z.ai 1210     glm/zai-3 HTTP 400 b'{"type":"error","error":{"type":"invalid_request_
-22:04  hook exit     ✗ after: exited 75
-(exit 0 · 0.2 s)

@@ -1,5 +1,0 @@
-$ rg -A2 'lesson:' captures/154-vs-friction.txt
-  lesson: 'none' from gb300 54% · from z.ai 0%
-     both found one 4,087 · only z.ai 4,817 · only gb300 11 · neither 10
-     median length when found: gb300 122 chars · z.ai 173 chars
-(exit 0 · 0.0 s)

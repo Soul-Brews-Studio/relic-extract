@@ -1,8 +1,0 @@
-$ git show (PR #31) -- report/status.py | rg '^[-+] '
--    ("gb300-day", "gb300", "qwen3:14b", "day", False, 1, "days-cache.json", lambda d, h, m: d, None, None),
--    ("gb300-3h", "gb300", "qwen3:14b", "3h", False, 5, "blocks-cache.json", lambda d, h, m: f"qwen3:14b|{d}|{h}", Non
--    ("gb300-1h", "gb300", "qwen3:14b", "1h", False, 5, "blocks-cache-1h.json", lambda d, h, m: f"qwen3:14b|{d}|{h}-1h
-+    ("gb300-day", "gb300", "qwen3:14b", "day", False, 1, "days-cache.json", lambda d, h, m: f"qwen3:14b|{d}", None, N
-+    ("gb300-3h", "gb300", "qwen3:14b", "3h", False, 5, "blocks-cache.json", lambda d, h, m: f"qwen3:14b|{d}|{h:02d}",
-+    ("gb300-1h", "gb300", "qwen3:14b", "1h", False, 5, "blocks-cache-1h.json", lambda d, h, m: f"qwen3:14b|{d}|{h:02d
-(exit 0 · 0.1 s)

@@ -103,8 +103,8 @@ fm lane (2026-10-27): `model` = `fm:system` / `fm:system deep`, Apple's on-devic
 --schema report/fm-reading[-deep].schema.json` (always valid JSON). Each answer also carries `host` (the Mac that
 answered: `local` or an ssh host). It runs one request at a time per Mac, about 430 windows an hour on m5.
 
-Models: gb300 = korn's ollama on gb300 over an ssh tunnel (127.0.0.1:11447), one request at a time. This is not
-nazt's vLLM. z.ai = glm-5.3 over z.ai's Anthropic-compatible API.
+Models: gb300 = an ollama reached over an ssh tunnel (`RELIC_OLLAMA_HOST`, default `gb300`; local port
+`RELIC_OLLAMA_PORT`, default 11447), one request at a time. z.ai = glm-5.3 over z.ai's Anthropic-compatible API.
 
 Run by hand in herdr panes. gb300 finished 2026-10-25 19:26. The z.ai lane was stopped 2026-10-26 04:4x and nothing runs now.
 The windows cover scan data up to 2026-10-25 16:30. "15m" is the window size, not how often anything runs.

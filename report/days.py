@@ -92,7 +92,11 @@ def _reopen(port):
     time.sleep(3)
 
 
-def tunnel(host, model, port=11447):
+OLLAMA_HOST = os.environ.get("RELIC_OLLAMA_HOST", "gb300")  # ssh host whose ollama the "gb300" lanes read
+OLLAMA_PORT = int(os.environ.get("RELIC_OLLAMA_PORT", "11447"))  # local end of the ssh tunnel
+
+
+def tunnel(host, model, port=OLLAMA_PORT):
     _TUN[port] = host
     s = socket.socket()
     if s.connect_ex(("127.0.0.1", port)) == 0:  # something listens already: use it only if it is an ollama with the model
@@ -108,7 +112,7 @@ def tunnel(host, model, port=11447):
         if s.connect_ex(("127.0.0.1", port)) == 0:
             s.close()
             return p
-    raise SystemExit(f"no tunnel to {host}:11434")
+    raise SystemExit(f"no tunnel to {host}:11434 (127.0.0.1:{port})")
 
 
 KEYS = ("type", "focus", "distraction", "work", "agents", "pattern", "en", "th")
@@ -124,7 +128,7 @@ def keep(unit, model, prompt, answer, secs):
     LOG.chmod(0o600)
 
 
-def ask(model, prompt, port=11447, keys=None):
+def ask(model, prompt, port=OLLAMA_PORT, keys=None):
     """keys: the answer keys to keep (KEYS by default; readings.py --deep adds friction and lesson)."""
     body = json.dumps({"model": model, "prompt": prompt, "stream": False, "format": "json", "think": False,
                        "options": {"temperature": 0.2, "num_ctx": 16384}}).encode()
@@ -193,7 +197,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--model", default="qwen3:14b")
-    ap.add_argument("--host", default="gb300")
+    ap.add_argument("--host", default=OLLAMA_HOST)
     ap.add_argument("--only", default="", help="comma-separated days (for comparing models)")
     a = ap.parse_args()
     t0 = time.time()

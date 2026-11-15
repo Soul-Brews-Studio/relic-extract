@@ -356,7 +356,7 @@ def main():
         dy.keep(f"{label} {a.unit}", a.model + (" deep" if a.deep else ""), prompt, ans, ans["secs"])
         return label, shape, dict(h=h, **ans), True
 
-    tun = dy.tunnel("gb300", model) if lane == "gb300" else None
+    tun = dy.tunnel(dy.OLLAMA_HOST, model) if lane == "gb300" else None
     fm_free = __import__("queue").Queue()
     if lane == "fm":
         for h in fm_setup([h.strip() for h in a.fm_hosts.split(",") if h.strip()]):

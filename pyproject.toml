@@ -1,6 +1,7 @@
 [project]
 name = "relic-extract"
 version = "0.1.0"
+license = "AGPL-3.0-only"
 description = "Step 2 of scan -> extract -> embed: relic-scan month files -> per-stream, deduped, chunked parts for embedding"
 requires-python = ">=3.11"
 dependencies = ["duckdb>=1.1", "pyarrow>=17"]

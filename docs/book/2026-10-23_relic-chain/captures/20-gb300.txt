@@ -1,4 +1,0 @@
-$ ssh gb300 nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv
-name, memory.used [MiB], memory.total [MiB]
-NVIDIA GB300, 63509 MiB, 256703 MiB
-(exit 0 · 0.4 s)

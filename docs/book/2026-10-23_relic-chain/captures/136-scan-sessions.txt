@@ -1,9 +1,0 @@
-$ duckdb: sessions in relic-scan's meta, now and in the kept copy
-┌─────────────────────┬──────────┐
-│        copy         │ sessions │
-│       varchar       │  int64   │
-├─────────────────────┼──────────┤
-│ now                 │   101183 │
-│ before-nat-incident │     3048 │
-└─────────────────────┴──────────┘
-(exit 0 · 0.1 s)

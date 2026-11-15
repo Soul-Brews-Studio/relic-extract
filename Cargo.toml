@@ -1,6 +1,7 @@
 [package]
 name = "relic-extract"
 version = "26.10.23-alpha.1344"
+license = "AGPL-3.0-only"
 edition = "2024"
 rust-version = "1.89"
 description = "Step 2 of scan -> extract -> embed: relic-scan month files -> per-stream, deduped, chunked parts for embedding"

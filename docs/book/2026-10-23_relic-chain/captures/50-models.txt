@@ -1,7 +1,0 @@
-$ ssh gb300 curl -s localhost:11434/api/tags
-qwen3:30b-a3b 30.5B
-qwen3:14b 14.8B
-typhoon-judtem-v5:latest 11.8B
-typhoon2.1-gemma3-12b:latest 11.8B
-bge-m3:latest 566.70M
-(exit 0 · 0.4 s)
