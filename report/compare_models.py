@@ -34,7 +34,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", default="typhoon2.1-gemma3-12b,typhoon-judtem-v5,qwen3:14b,qwen3:30b-a3b")
     ap.add_argument("--days", type=int, default=12)
-    ap.add_argument("--host", default="gb300")
+    ap.add_argument("--host", default=dy.OLLAMA_HOST)
     a = ap.parse_args()
     con = common.connect(HOME / ".relic-scan", HOME / ".relic-extract")
     picks = [r[0] for r in con.execute("""select d from (select substr(ts_th, 1, 10) d, substr(ts_th, 1, 7) m, count(distinct msgkey) n,

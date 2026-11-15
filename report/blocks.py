@@ -26,7 +26,7 @@ def main():
     dy.on_stop()
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3:14b")
-    ap.add_argument("--host", default="gb300")
+    ap.add_argument("--host", default=dy.OLLAMA_HOST)
     ap.add_argument("--min", type=int, default=5)
     ap.add_argument("--limit", type=int, default=0, help="only the first N blocks (a trial)")
     ap.add_argument("--hours", type=int, default=3, choices=[1, 2, 3, 4, 6], help="block length")

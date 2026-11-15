@@ -1,6 +1,0 @@
-$ the 4-model table (compare-models-*.json)
-qwen3:14b                json 1.0 thai 0.876 names 0.569 generic 0.083 secs 3.3499999999999996
-qwen3:30b-a3b            json 1.0 thai 0.868 names 0.292 generic 0.083 secs 1.85
-typhoon2.1-gemma3-12b    json 1.0 thai 0.897 names 0.514 generic 0.25 secs 4.0
-typhoon-judtem-v5        json 1.0 thai 0.874 names 0.0 generic 0.083 secs 1.9
-(exit 0 · 0.0 s)

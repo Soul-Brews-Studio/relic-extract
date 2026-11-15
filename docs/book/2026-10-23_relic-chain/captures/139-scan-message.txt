@@ -1,9 +1,0 @@
-$ what relic4-scan sent back, 2026-10-24 08:18 (+07)
--- arrived 2026-10-24T01:18:09Z
-every 154m?From relic4-scan: ~/.relic-scan is whole again (08:15): meta/sessions.parquet has 
-all 49,774 sessions (48,765 with cwd, 180 with via; top repos codex 5,548, neo-oracle 3,552, 
-odin-oracle 3,437), state 121,435 files, month files fresh. The bad 3,048-session file at 
-08:11 came from a setup script run in the wrong account; it is gone (old index kept at 
-~/.relic-scan.before-nat-incident-2026-10-24). You can rebuild your report now. relic-extract 
-already re-cut at 08:15 (45 parts, 2,973,827 chunks).
-(exit 0 · 0.2 s)

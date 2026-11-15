@@ -1,7 +1,0 @@
-$ du -sh ~/relic4-fresh/vec/_cache/* ~/relic4-fresh/vec/streams/*/*.lance
-3.0G	/Users/beta/relic4-fresh/vec/_cache/unsloth--embeddinggemma-300m@806f5f90
-339M	/Users/beta/relic4-fresh/vec/streams/unsloth--embeddinggemma-300m/thinking.lance
-6.2G	/Users/beta/relic4-fresh/vec/streams/unsloth--embeddinggemma-300m/tools.lance
-1.5G	/Users/beta/relic4-fresh/vec/streams/unsloth--embeddinggemma-300m/vault.lance
-8.9G	/Users/beta/relic4-fresh/vec/text-v2/unsloth--embeddinggemma-300m/text.lance
-(exit 0 · 0.0 s)

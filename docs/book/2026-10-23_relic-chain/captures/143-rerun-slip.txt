@@ -1,5 +1,0 @@
-$ what the slipped capture2.sh re-ran (kept in /tmp/bk/captures-rerun-1024)
-      29
-4:2:47PM INF no leaks found
-11:Current Version ID: 92dc6acf-6af8-4533-a870-0bc873c2c327
-(exit 0 · 0.0 s)

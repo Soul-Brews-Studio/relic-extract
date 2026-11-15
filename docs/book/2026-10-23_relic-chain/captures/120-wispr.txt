@@ -1,8 +1,0 @@
-$ sqlite3 'file:flow.sqlite?mode=ro' (Wispr Flow history: counts only)
-486|2026-08-21|2026-10-24
-com.github.wez.wezterm|230
-com.hnc.Discord|134
-|40
-ai.perplexity.comet|37
-com.google.Chrome|25
-(exit 0 · 0.1 s)

@@ -1,9 +1,0 @@
-03-embed.md:114 | severe | says only the latest month's part had new text; capture lists all 15 parts changed, and 725,318 distinct is below the first run's 748,619 | capture 23:1 | say all parts re-cut (rules changed, hash differs), distinct fell 748,619 to 725,318
-03-embed.md:91 | severe | "whole chain scan to embed in 833 s" placed after tools (1,733 s) and vault; 833 s covers text only (text embed 785.2 s), tools alone exceeds it | capture 22:9 | say the text-only first chain took 833 s
-02-extract.md:89 | minor | examples "ok" and "ต่อ" as the lost short messages are not in the capture; only counts are shown | capture 13:7-9 | drop the examples or say "e.g." as a guess
-02-extract.md:114 | minor | "_extract.json is written last" and "unfinished run has no _extract.json" are not shown; ls only lists it first | capture 15:1 | soften to "ควรเป็น" or cite the source code
-02-extract.md:123 | minor | "change a rule, hash differs, every month re-cut" is not shown in this chapter's captures (ch.3 capture 23 shows it only indirectly) | capture 15:13 | point to 3.4 or soften
-02-extract.md:108 | minor | "chain runs every hour" not in captures 14 or config (no schedule shown) | capture 14:6 | drop "ทุกชั่วโมง" or cite the schedule
-02-extract.md:133 | minor | code block `duckdb: one chunk row` is a label not a command, and the query that picked "2026-10 first 3 rows" is never shown | capture 16:1 | show the real duckdb command or mark it as a sketch
-03-embed.md:4 | minor | "too heavy for m5" and "no setup on m5 except host name gb300" (line 24) are not shown by any capture | capture 20:1 | remove or state as the author's choice
-03-embed.md:123 | minor | repeats ch.2 line 143 (blake2b key means no re-embed); also "ไม่เสียเวลาเป็นครึ่งชั่วโมง" fits neither 785 s nor 28 s clearly | capture 23:4 | cut the repeat, say "13 นาทีเหลือครึ่งนาที"

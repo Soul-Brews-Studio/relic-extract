@@ -7,3 +7,7 @@ uv.lock.bak
 ψ
 ψ/
 .claude/PSI_CARETAKER
+
+# hand-given topic names are personal: keep them in ~/.relic-extract/report/
+report/focus-names.json
+report/topic-names.json

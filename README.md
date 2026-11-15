@@ -177,11 +177,21 @@ section, a map on the right names every part, section and month. Its parts:
 
 An overview card at the top lists every section's finding in one line. Words go through `t()` (`report/i18n.js`):
 English by default, Thai on the language button or `?lang=th`. `monthly.parquet` holds the numbers as
-(month, metric, series, value) for DuckDB. Topic names are hand-given in `report/topic-names.json`, keyed by a
-topic's three top words; when a re-run moves the words, the name falls away rather than going stale.
+(month, metric, series, value) for DuckDB. Topic names are hand-given in `~/.relic-extract/report/topic-names.json`
+(`focus-names.json` beside it; kept out of the repo, they name your own work), keyed by a topic's three top words; when a re-run moves the words, the name falls away rather than going stale.
 
 ## Docs
 
 - `docs/SCAN-INPUT.md`: relic-scan's output, read from its source and checked against the data (10 rounds).
 - `docs/LITERATURE.md`: what earlier relic generations (v1-v4, relic-lessons, relic4-scan) decided and measured about
   extraction, keys, chunking, storage, FTS/ICU and LanceDB.
+
+## Settings for the report lanes
+
+The `gb300` reading lanes ask an ollama over an ssh tunnel. `RELIC_OLLAMA_HOST` is the ssh host (default `gb300`)
+and `RELIC_OLLAMA_PORT` the local end of the tunnel (default 11447). The z.ai lanes read their keys from `pass`;
+no key is kept in this repo.
+
+## License
+
+AGPL-3.0, the same as [relic5](https://github.com/Soul-Brews-Studio/relic5). See `LICENSE`.

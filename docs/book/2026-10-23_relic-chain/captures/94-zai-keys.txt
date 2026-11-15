@@ -1,5 +1,0 @@
-$ python3 zai-keys.py glm/zai-2 glm/zai-3 glm/nat-wrw
-glm/zai-2    HTTP 200  ok
-glm/zai-3    HTTP 429  code 1113  [1113][Insufficient balance or no resource package. Please r
-glm/nat-wrw  HTTP 200  ok
-(exit 0 · 5.2 s)

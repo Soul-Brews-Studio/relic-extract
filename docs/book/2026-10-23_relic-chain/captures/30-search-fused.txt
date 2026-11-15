@@ -1,7 +1,0 @@
-$ RELIC4_ROOT=~/relic4-fresh just search 'why did black.local keep rebooting' -n 6
-usage: search.py [-h] [-n N] [--stream STREAM] [--month MONTH] [--repo REPO]
-                 [--role ROLE] [--mode {both,icu,vector}] [--json]
-                 query
-search.py: error: unrecognized arguments: did black.local keep rebooting
-error: recipe `search` failed on line 58 with exit code 2
-(exit 0 · 0.8 s)

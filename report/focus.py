@@ -85,7 +85,7 @@ def main():
     from sklearn.cluster import KMeans
     thai_cut = lambda s: word_tokenize(s, engine="newmm", keep_whitespace=False)
     thai_stop = set(thai_stopwords())
-    names_f = Path(__file__).parent / "focus-names.json"
+    names_f = next((q for q in (Path.home() / ".relic-extract" / "report" / "focus-names.json", Path(__file__).parent / "focus-names.json") if q.exists()), Path("focus-names.json"))
     names = json.loads(names_f.read_text()) if names_f.exists() else {}
     try:
         from relic4.core import Relic
